@@ -1,0 +1,86 @@
+<?xml version="1.0" ?>
+<lsc xmlns="http://lsc-project.org/XSD/lsc-core-2.1.xsd" xmlns:fusiondirectory="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.0.xsd">
+	<connections>
+		<pluginConnection>
+			<name>fusiondirectory</name>
+			<url>http://10.4.158.72/fusiondirectory/rest.php/v1</url>
+			<username>fd-admin</username>
+			<password>secret</password>
+		</pluginConnection>
+		<ldapConnection>
+			<name>openldap</name>
+			<url>ldap://localhost/dc=lsc,dc=local</url>
+			<username>cn=Manager,dc=lsc,dc=local</username>
+			<password>secret</password>
+			<authentication>SIMPLE</authentication>
+			<pageSize>1000</pageSize>
+		</ldapConnection>
+	</connections>
+	<tasks>
+		<task>
+			<name>Users</name>
+			<bean>org.lsc.beans.SimpleBean</bean>
+			<pluginSourceService implementationClass="org.lsc.plugins.connectors.fusiondirectory.FusionDirectorySrcService">
+				<name>fusiondirectorysrcservice</name>
+				<connection reference="fusiondirectory" />
+				<fusiondirectory:fusionDirectoryServiceSettings>
+					<name>fusiondirectory-service-settings</name>
+					<connection reference="fusiondirectory" />
+					<fusiondirectory:entity>USER</fusiondirectory:entity>
+					<fusiondirectory:pivot>uid</fusiondirectory:pivot>
+					<fusiondirectory:attributes>
+						<fusiondirectory:tab name="user">
+							<string>uid</string>
+							<string>cn</string>
+							<string>sn</string>
+							<string>givenName</string>
+							<string>title</string>
+						</fusiondirectory:tab>
+						<fusiondirectory:tab name="mailAccount">
+							<string>mail</string>
+						</fusiondirectory:tab>
+					</fusiondirectory:attributes>
+				</fusiondirectory:fusionDirectoryServiceSettings>
+			</pluginSourceService>
+			<ldapDestinationService>
+				<name>ldapdestservice</name>
+				<connection reference="openldap" />
+				<baseDn>dc=lsc,dc=local</baseDn>
+				<pivotAttributes>
+					<string>uid</string>
+				</pivotAttributes>
+				<fetchedAttributes>
+					<string>objectclass</string>
+					<string>uid</string>
+					<string>cn</string>
+					<string>sn</string>
+					<string>givenName</string>
+					<string>mail</string>
+					<string>title</string>
+				</fetchedAttributes>
+				<getAllFilter><![CDATA[(&(objectClass=inetOrgPerson)(!(roomNumber=*)))]]></getAllFilter>
+				<getOneFilter><![CDATA[(&(objectClass=inetOrgPerson)(!(roomNumber=*))(uid={uid}))]]></getOneFilter>
+			</ldapDestinationService>
+			<propertiesBasedSyncOptions>
+				<mainIdentifier><![CDATA["uid=" + srcBean.getDatasetFirstValueById("uid").toLowerCase() + ",ou=fusion,dc=lsc,dc=local"]]></mainIdentifier>
+				<defaultDelimiter>;</defaultDelimiter>
+				<defaultPolicy>FORCE</defaultPolicy>
+				<conditions>
+					<create>true</create>
+					<update>true</update>
+					<delete>false</delete>
+				</conditions>
+				<dataset>
+					<name>objectclass</name>
+					<policy>KEEP</policy>
+					<createValues>
+						<string>"inetOrgPerson"</string>
+						<string>"organizationalPerson"</string>
+						<string>"person"</string>
+						<string>"top"</string>
+					</createValues>
+				</dataset>
+			</propertiesBasedSyncOptions>
+		</task>
+	</tasks>
+</lsc>
