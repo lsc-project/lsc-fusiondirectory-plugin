@@ -71,9 +71,12 @@ Example of a destination service :
 <pluginDestinationService implementationClass="org.lsc.plugins.connectors.fusiondirectory.FusionDirectoryDstService">
     <name>fusiondirectory-dest-service</name>
     <connection reference="fusiondirectory" />
-    <fusiondirectory:entity>USER</fusiondirectory:entity>
-    <fusiondirectory:pivot>uid</fusiondirectory:pivot>
-    <fusiondirectory:attributes>
+    <fusiondirectory:fusionDirectoryServiceSettings>
+        <name>fusiondirectory-service-settings</name>
+        <connection reference="fusiondirectory" />
+        <fusiondirectory:entity>USER</fusiondirectory:entity>
+        <fusiondirectory:pivot>uid</fusiondirectory:pivot>
+        <fusiondirectory:attributes>
             <fusiondirectory:tab name="user">
                     <string>uid</string>
                     <string>cn</string>
@@ -86,7 +89,9 @@ Example of a destination service :
             <fusiondirectory:tab name="mailAccount">
                     <string>mail</string>
             </fusiondirectory:tab>
-    </fusiondirectory:attributes>
+        </fusiondirectory:attributes>
+    </fusiondirectory:fusionDirectoryServiceSettings>
+</pluginDestinationService>
 ```
 
 When using the destination service, the `mainIdentifier` holds the value of your pivot attribute, while the `base` attribute holds the location where the entity will be created or moved to.
