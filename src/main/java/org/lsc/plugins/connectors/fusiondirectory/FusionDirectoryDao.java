@@ -350,10 +350,10 @@ public class FusionDirectoryDao {
 			if (modificationsItemsByHash.get(attribute) instanceof ArrayList<?>) {
 				ArrayList<?> list = (ArrayList<?>) modificationsItemsByHash.get(attribute);
 				if (tabAttribute.getAttribute().isMultiple()) {
-					attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list.get(0));
+					attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list);
 				}
 				else {
-					attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list);
+					attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list.get(0));
 				}
 			} else {
 				throw new LscServiceException(String.format("%s is not a supported type for attribute %s",modificationsItemsByHash.get(attribute).getClass().toString(), attribute));
