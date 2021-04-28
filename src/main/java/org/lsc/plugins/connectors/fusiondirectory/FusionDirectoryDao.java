@@ -65,9 +65,10 @@ import org.lsc.configuration.PluginConnectionType;
 import org.lsc.configuration.ValuesType;
 import org.lsc.exception.LscServiceException;
 import org.lsc.plugins.connectors.fusiondirectory.beans.Login;
-import org.lsc.plugins.connectors.fusiondirectory.generated.FusionDirectoryAttributeTab;
-import org.lsc.plugins.connectors.fusiondirectory.generated.FusionDirectoryAttributes;
-import org.lsc.plugins.connectors.fusiondirectory.generated.FusionDirectoryServiceSettings;
+import org.lsc.plugins.connectors.fusiondirectory.generated.Attribute;
+import org.lsc.plugins.connectors.fusiondirectory.generated.Attributes;
+import org.lsc.plugins.connectors.fusiondirectory.generated.AttributesTab;
+import org.lsc.plugins.connectors.fusiondirectory.generated.ServiceSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -94,13 +95,13 @@ public class FusionDirectoryDao {
 	private final Optional<String> base;
 	private final Optional<String> filter;
 	private final Optional<String> template;
-	private final FusionDirectoryAttributes attributes;
+	private final Attributes attributes;
 
 	private WebTarget target;
 	private String token;
 	private ObjectMapper mapper;
 
-	public FusionDirectoryDao(PluginConnectionType connection, FusionDirectoryServiceSettings settings) throws LscServiceException {
+	public FusionDirectoryDao(PluginConnectionType connection, ServiceSettings settings) throws LscServiceException {
 		mapper = new ObjectMapper();
 		this.entity = settings.getEntity();
 		this.pivot = getStringParameter(settings.getPivot());
@@ -209,23 +210,23 @@ public class FusionDirectoryDao {
 		Response response = null;
 		try {
 			Map<String, Object> results = new HashMap<String, Object>();
-			for (FusionDirectoryAttributeTab attributeTab: attributes.getTab()) {
-				WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(attributeTab.getName());
+			for (AttributesTab attributesTab: attributes.getTab()) {
+				WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(attributesTab.getName());
 				response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, token).get(Response.class);
 				
 				if (checkResponse(response)) {
 					Map<String, Object> raw = mapper.readValue(response.readEntity(String.class), Map.class);
-					for (String attribute : attributeTab.getString()) {
-						if (raw.get(attribute) == null) {
-							throw new LscServiceException(String.format("Attribute %s could not be found in tab %s", attribute, attributeTab.getName()));
+					for (Attribute attribute : attributesTab.getAttribute()) {
+						if (raw.get(attribute.getValue()) == null) {
+							throw new LscServiceException(String.format("Attribute %s could not be found in tab %s", attribute, attributesTab.getName()));
 						}
-						results.put(attribute, raw.get(attribute));
+						results.put(attribute.getValue(), raw.get(attribute.getValue()));
 					}
 					
 				} else {
 					// If tab is inactive a 400 error is thrown.
-					for (String attribute : attributeTab.getString()) {
-						results.put(attribute, null);
+					for (Attribute attribute : attributesTab.getAttribute()) {
+						results.put(attribute.getValue(), null);
 					}
 				}
 			}
@@ -248,9 +249,9 @@ public class FusionDirectoryDao {
 
 	public ValuesType getAttributes() {
 		ValuesType flatAttributes = new ValuesType();
-		for (FusionDirectoryAttributeTab attributeTab: attributes.getTab()) {
-			for (String attribute : attributeTab.getString()) {
-				flatAttributes.getString().add(attribute);
+		for (AttributesTab attributesTab: attributes.getTab()) {
+			for (Attribute attribute : attributesTab.getAttribute()) {
+				flatAttributes.getString().add(attribute.getValue());
 			}
 		}
 		return flatAttributes;
@@ -348,11 +349,11 @@ public class FusionDirectoryDao {
 			}
 			if (modificationsItemsByHash.get(attribute) instanceof ArrayList<?>) {
 				ArrayList<?> list = (ArrayList<?>) modificationsItemsByHash.get(attribute);
-				if (list.size() == 1) {
-					attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute(), list.get(0));
+				if (tabAttribute.getAttribute().isMultiple()) {
+					attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list.get(0));
 				}
 				else {
-					attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute(), list);
+					attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list);
 				}
 			} else {
 				throw new LscServiceException(String.format("%s is not a supported type for attribute %s",modificationsItemsByHash.get(attribute).getClass().toString(), attribute));
@@ -363,10 +364,10 @@ public class FusionDirectoryDao {
 	private TabAttribute getTabAttribute(String attribute) throws LscServiceException {
 		TabAttribute tabAttribute = null;
 		
-		for (FusionDirectoryAttributeTab attributeTab: attributes.getTab()) {
-			for (String someAttribute : attributeTab.getString()) {
-				if (someAttribute.equalsIgnoreCase(attribute)) {
-					tabAttribute = new TabAttribute(attributeTab.getName(), someAttribute); 
+		for (AttributesTab attributesTab: attributes.getTab()) {
+			for (Attribute someAttribute : attributesTab.getAttribute()) {
+				if (someAttribute.getValue().equalsIgnoreCase(attribute)) {
+					tabAttribute = new TabAttribute(attributesTab.getName(), someAttribute); 
 				}
 			}
 		}
@@ -377,15 +378,15 @@ public class FusionDirectoryDao {
 	}
 	private class TabAttribute {
 		String tab;
-		String attribute;
-		public TabAttribute(String tab, String attribute) {
+		Attribute attribute;
+		public TabAttribute(String tab, Attribute attribute) {
 			this.tab = tab;
 			this.attribute = attribute;
 		}
 		public String getTab() {
 			return tab;
 		}
-		public String getAttribute() {
+		public Attribute getAttribute() {
 			return attribute;
 		}
 	}

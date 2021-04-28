@@ -44,24 +44,26 @@ Example of source service :
 <pluginSourceService implementationClass="org.lsc.plugins.connectors.fusiondirectory.FusionDirectorySrcService">
     <name>fusiondirectory-source-service</name>
     <connection reference="fusiondirectory" />
-    <fusiondirectory:fusionDirectoryServiceSettings>
-            <name>fusiondirectory-service-settings</name>
-            <connection reference="fusiondirectory" />
-            <fusiondirectory:entity>USER</fusiondirectory:entity>
-            <fusiondirectory:pivot>uid</fusiondirectory:pivot>
-            <fusiondirectory:attributes>
-                    <fusiondirectory:tab name="user">
-                            <string>uid</string>
-                            <string>cn</string>
-                            <string>sn</string>
-                            <string>givenName</string>
-                            <string>title</string>
-                    </fusiondirectory:tab>
-                    <fusiondirectory:tab name="mailAccount">
-                            <string>mail</string>
-                    </fusiondirectory:tab>
-            </fusiondirectory:attributes>
-    </fusiondirectory:fusionDirectoryServiceSettings>
+    <fusiondirectory:serviceSettings>
+        <name>fusiondirectory-service-settings</name>
+        <connection reference="fusiondirectory" />
+        <fusiondirectory:entity>USER</fusiondirectory:entity>
+        <fusiondirectory:pivot>uid</fusiondirectory:pivot>
+        <fusiondirectory:attributes>
+            <fusiondirectory:tab name="user">
+                    <fusiondirectory:attribute>uid</fusiondirectory:attribute>
+                    <fusiondirectory:attribute>cn</fusiondirectory:attribute>
+                    <fusiondirectory:attribute>base</fusiondirectory:attribute>
+                    <fusiondirectory:attribute>sn</fusiondirectory:attribute>
+                    <fusiondirectory:attribute>givenName</fusiondirectory:attribute>
+                    <fusiondirectory:attribute multiple="true">title</fusiondirectory:attribute>
+                    <fusiondirectory:attribute>userPassword</fusiondirectory:attribute>
+            </fusiondirectory:tab>
+            <fusiondirectory:tab name="mailAccount">
+                    <fusiondirectory:attribute>mail</fusiondirectory:attribute>
+            </fusiondirectory:tab>
+        </fusiondirectory:attributes>
+    </fusiondirectory:serviceSettings>
 </pluginSourceService>
 ```
 
@@ -71,26 +73,26 @@ Example of a destination service :
 <pluginDestinationService implementationClass="org.lsc.plugins.connectors.fusiondirectory.FusionDirectoryDstService">
     <name>fusiondirectory-dest-service</name>
     <connection reference="fusiondirectory" />
-    <fusiondirectory:fusionDirectoryServiceSettings>
+    <fusiondirectory:serviceSettings>
         <name>fusiondirectory-service-settings</name>
         <connection reference="fusiondirectory" />
         <fusiondirectory:entity>USER</fusiondirectory:entity>
         <fusiondirectory:pivot>uid</fusiondirectory:pivot>
         <fusiondirectory:attributes>
             <fusiondirectory:tab name="user">
-                    <string>uid</string>
-                    <string>cn</string>
-                    <string>base</string>
-                    <string>sn</string>
-                    <string>givenName</string>
-                    <string>title</string>
-                    <string>userPassword</string>
+                <fusiondirectory:attribute>uid</fusiondirectory:attribute>
+                <fusiondirectory:attribute>cn</fusiondirectory:attribute>
+                <fusiondirectory:attribute>base</fusiondirectory:attribute>
+                <fusiondirectory:attribute>sn</fusiondirectory:attribute>
+                <fusiondirectory:attribute>givenName</fusiondirectory:attribute>
+                <fusiondirectory:attribute multiple="true">title</fusiondirectory:attribute>
+                <fusiondirectory:attribute>userPassword</fusiondirectory:attribute>
             </fusiondirectory:tab>
             <fusiondirectory:tab name="mailAccount">
-                    <string>mail</string>
+                <fusiondirectory:attribute>mail</fusiondirectory:attribute>
             </fusiondirectory:tab>
         </fusiondirectory:attributes>
-    </fusiondirectory:fusionDirectoryServiceSettings>
+    </fusiondirectory:serviceSettings>
 </pluginDestinationService>
 ```
 

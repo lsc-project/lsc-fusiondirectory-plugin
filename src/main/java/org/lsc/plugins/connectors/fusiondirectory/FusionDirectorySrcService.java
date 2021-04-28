@@ -58,7 +58,7 @@ import org.lsc.configuration.TaskType;
 import org.lsc.exception.LscServiceCommunicationException;
 import org.lsc.exception.LscServiceConfigurationException;
 import org.lsc.exception.LscServiceException;
-import org.lsc.plugins.connectors.fusiondirectory.generated.FusionDirectoryServiceSettings;
+import org.lsc.plugins.connectors.fusiondirectory.generated.ServiceSettings;
 import org.lsc.service.IService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,12 +72,12 @@ public class FusionDirectorySrcService implements IService {
 	public FusionDirectorySrcService(final TaskType task) throws LscServiceConfigurationException {
 		try {
 			if (task.getPluginSourceService().getAny() == null || task.getPluginSourceService().getAny().size() != 1
-					|| !(task.getPluginSourceService().getAny().get(0) instanceof FusionDirectoryServiceSettings)) {
+					|| !(task.getPluginSourceService().getAny().get(0) instanceof ServiceSettings)) {
 				throw new LscServiceConfigurationException(
 						"Unable to identify the fusiondirectory service configuration inside the plugin source node of the task: "
 								+ task.getName());
 			}
-			FusionDirectoryServiceSettings settings = (FusionDirectoryServiceSettings) task.getPluginSourceService()
+			ServiceSettings settings = (ServiceSettings) task.getPluginSourceService()
 					.getAny().get(0);
 			PluginConnectionType pluginConnectionType = (PluginConnectionType) task.getPluginSourceService()
 					.getConnection().getReference();

@@ -1,28 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.0.xsd"
 	targetNamespace="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.0.xsd" elementFormDefault="qualified" xmlns:jaxb="http://java.sun.com/xml/ns/jaxb"
-	xmlns:lsc="http://lsc-project.org/XSD/lsc-core-2.1.xsd" jaxb:version="2.0">
+	xmlns:lsc="http://lsc-project.org/XSD/lsc-core-2.1.xsd" jaxb:version="2.1">
 
 	<xsd:import namespace="http://lsc-project.org/XSD/lsc-core-2.1.xsd" schemaLocation="lsc-core-2.1.xsd" />
 
-	<xsd:complexType name="fusionDirectoryAttributeTab">
-		<xsd:complexContent>
-			<xsd:extension base="lsc:valuesType">
-				<xsd:attribute name="name" type="xsd:string" use="required" />
-			</xsd:extension>
-		</xsd:complexContent>
+	<xsd:complexType name="attributesTab">
+		<xsd:sequence>
+			<xsd:element name="attribute" type="attribute"  minOccurs="0" maxOccurs="unbounded" />
+		</xsd:sequence>
+		<xsd:attribute name="id" type="xsd:string" use="optional" />
+		<xsd:attribute name="name" type="xsd:string" use="required" />
 	</xsd:complexType>
 
-	<xsd:complexType name="fusionDirectoryAttributes">
+	<xsd:complexType name="attribute">
+		<xsd:simpleContent>
+			<xsd:extension base="xsd:string">
+				<xsd:attribute name="multiple" type="xsd:boolean" use="optional" />
+			</xsd:extension>
+		</xsd:simpleContent>
+	</xsd:complexType>
+	
+	<xsd:complexType name="attributes">
 		<xsd:sequence>
-			<xsd:element name="tab" type="fusionDirectoryAttributeTab" minOccurs="0" maxOccurs="unbounded" />
+			<xsd:element name="tab" type="attributesTab" minOccurs="0" maxOccurs="unbounded" />
 		</xsd:sequence>
 		<xsd:attribute name="id" type="xsd:string" use="optional" />
 	</xsd:complexType>
 
-
-
-	<xsd:element name="fusionDirectoryServiceSettings">
+	<xsd:element name="serviceSettings">
 		<xsd:complexType>
 			<xsd:complexContent>
 				<xsd:extension base="lsc:serviceType">
@@ -33,12 +39,11 @@
 						<xsd:element name="base" type="xsd:string" minOccurs="0" />
 						<xsd:element name="filter" type="xsd:string" minOccurs="0" />
 						<xsd:element name="template" type="xsd:string" minOccurs="0" />
-						<xsd:element name="attributes" type="fusionDirectoryAttributes" minOccurs="0" />
+						<xsd:element name="attributes" type="attributes" minOccurs="0" />
 					</xsd:sequence>
 				</xsd:extension>
 			</xsd:complexContent>
 		</xsd:complexType>
 	</xsd:element>
-
 
 </xsd:schema>
