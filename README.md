@@ -30,7 +30,7 @@ Example:
 
 ### Service settings
 
-+ `entity`: the type of entity to synchronize
++ `entity`: the type of entity to synchronize (USER, OGROUP ...)
 + `directory`: The LDAP directory to log into,  default is **"default"** (OPTIONAL)
 + `base`: An LDAP base to use (OPTIONAL)
 + `filter`: An LDAP filter to search with (OPTIONAL)
@@ -96,8 +96,77 @@ Example of a destination service :
 </pluginDestinationService>
 ```
 
+Multiple attributes in Fusiondirectory must be declared as so:
+
+```
+<fusiondirectory:attribute multiple="true">title</fusiondirectory:attribute>
+```
+
 When using the destination service, the `mainIdentifier` holds the value of your pivot attribute, while the `base` attribute holds the location where the entity will be created or moved to.
 
+## Scripting
+
+` org.lsc.plugins.connectors.fusiondirectory.utils.FusionDirectorySearch` performs searches in Fusiondirectory and is useful for scripting.
+
+First, declare it as a customLibrary:
+
+```
+<task>
+...
+	<customLibrary>
+		<string>org.lsc.plugins.connectors.fusiondirectory.utils.FusionDirectorySearch</string>
+	</customLibrary>
+</task>
+```
+
+Then, an instance of the class can be accessed in scripts using `custom[0]`:
+
+```
+<dataset>
+  <name>member</name>
+  <forceValues>
+    <string><![CDATA[
+    var fdSearch = custom[0];
+    ...
+     ]]></string>
+  </forceValues>
+</dataset>
+```
+
+This library has available methods:
+
+* Log in FusionDirectory if no session has been previously opened: void connect(_endpoint_, _username_, _password_);
+* Search an entity withn base using ldap filter: List<String> search(_entity_, _base_, _filter_);
+* Get all attribute values for an entity with this DN: List<String> attribute(_entity_, _dn_, _attribute_);
+
+Here is a script example of resolving group members DN from AD to FusionDirectory:
+
+```
+<dataset>
+  <name>member</name>
+  <forceValues>
+    <string><![CDATA[
+      var fdSearch = custom[0];
+      fdSearch.connect('https://fd.example.com/rest.php/v1','fd-admin','secret');
+      var srcMembers = srcBean.getDatasetValuesById("member");
+      var dstMembers = [];
+      for (var i=0; i<srcMembers.size(); i++) {
+        var srcMemberDn = srcMembers[i];
+        var sAMAccountName = "";
+        try {
+          sAMAccountName = srcLdap.attribute(srcMemberDn, "sAMAccountName").get(0);
+        } catch (e) {
+          continue;
+        }
+        var dstMember = fdSearch.search("USER","dc=example,dc=com","(uid=" + sAMAccountName + ")");
+        if (dstMember.size() != 1) { continue; }
+        dstMembers.push(dstMember.get(0));
+      }
+      dstMembers
+    ]]></string>
+  </forceValues>
+</dataset>
+```
 
 ## Examples
 
