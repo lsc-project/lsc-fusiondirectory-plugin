@@ -97,7 +97,7 @@ public class FusionDirectoryDao {
 	private final Optional<String> base;
 	private final Optional<String> filter;
 	private final Optional<String> template;
-	private final Attributes attributes;
+	private final Attributes attributesSettings;
 
 	private WebTarget target;
 	private String token;
@@ -113,7 +113,7 @@ public class FusionDirectoryDao {
 		this.filter = getStringParameter(settings.getFilter());
 		this.directory = getStringParameter(settings.getDirectory());
 		this.template = getStringParameter(settings.getTemplate());
-		this.attributes = settings.getAttributes();
+		this.attributesSettings = settings.getAttributes();
 		
 		Client client = ClientBuilder.newClient().register(new JacksonFeature());
 		target = client.target(connection.getUrl());
@@ -247,15 +247,20 @@ public class FusionDirectoryDao {
 		Response response = null;
 		try {
 			Map<String, Object> results = new HashMap<String, Object>();
-			for (AttributesTab attributesTab: attributes.getTab()) {
+			for (AttributesTab attributesTab: attributesSettings.getTab()) {
 				WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(attributesTab.getName());
 				response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, token).get(Response.class);
 				
 				if (checkResponse(response)) {
 					Map<String, Object> raw = mapper.readValue(response.readEntity(String.class), Map.class);
 					for (Attribute attribute : attributesTab.getAttribute()) {
-						if (raw.get(attribute.getValue()) == null) {
+						Object value = raw.get(attribute.getValue());
+						if (value == null) {
 							throw new LscServiceException(String.format("Attribute %s could not be found in tab %s", attribute.getValue(), attributesTab.getName()));
+						}
+						// Empty string value are considered unset
+						if (value instanceof String && ((String)value).isEmpty()) { 
+							continue;
 						}
 						results.put(attribute.getValue(), raw.get(attribute.getValue()));
 					}
@@ -277,16 +282,22 @@ public class FusionDirectoryDao {
 		}
 	}
 
-	public Optional<Entry<String, LscDatasets>> findFirstByPivot(String pivotValue) throws LscServiceException {
+	public Optional<Entry<String, LscDatasets>> findFirstByPivotAndFilter(String pivotValue) throws LscServiceException {
 		StringBuilder pivotFilter = new StringBuilder();
 		pivotFilter.append("(").append(getPivotName()).append("=").append(pivotValue).append(")");
 		String computedFilter = filter.map(f -> "(&" + f  + pivotFilter.toString() + ")").orElse(pivotFilter.toString());
 		return getList(Optional.of(computedFilter)).entrySet().stream().findFirst();
 	}
+	
+	public Optional<Entry<String, LscDatasets>> findFirstByPivot(String pivotValue) throws LscServiceException {
+		StringBuilder pivotFilter = new StringBuilder();
+		pivotFilter.append("(").append(getPivotName()).append("=").append(pivotValue).append(")");
+		return getList(Optional.of(pivotFilter.toString())).entrySet().stream().findFirst();
+	}
 
 	public ValuesType getAttributes() {
 		ValuesType flatAttributes = new ValuesType();
-		for (AttributesTab attributesTab: attributes.getTab()) {
+		for (AttributesTab attributesTab: attributesSettings.getTab()) {
 			for (Attribute attribute : attributesTab.getAttribute()) {
 				flatAttributes.getString().add(attribute.getValue());
 			}
@@ -401,7 +412,12 @@ public class FusionDirectoryDao {
 					attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list);
 				}
 				else {
-					attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list.get(0));
+					if (!list.isEmpty()) {
+						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list.get(0));
+					} else { 
+						// Attribute removal
+						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), "");
+					}
 				}
 			} else {
 				throw new LscServiceException(String.format("%s is not a supported type for attribute %s",modificationsItemsByHash.get(attribute).getClass().toString(), attribute));
@@ -412,7 +428,7 @@ public class FusionDirectoryDao {
 	private TabAttribute getTabAttribute(String attribute) throws LscServiceException {
 		TabAttribute tabAttribute = null;
 		
-		for (AttributesTab attributesTab: attributes.getTab()) {
+		for (AttributesTab attributesTab: attributesSettings.getTab()) {
 			for (Attribute someAttribute : attributesTab.getAttribute()) {
 				if (someAttribute.getValue().equalsIgnoreCase(attribute)) {
 					tabAttribute = new TabAttribute(attributesTab.getName(), someAttribute); 

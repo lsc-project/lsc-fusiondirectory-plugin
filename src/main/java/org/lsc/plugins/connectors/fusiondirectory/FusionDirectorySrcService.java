@@ -148,7 +148,7 @@ public class FusionDirectorySrcService implements IService {
 	private IBean getBeanForClean(String pivotValue) throws LscServiceException {
 		String pivotName = dao.getPivotName();
 		try {
-			Optional<Entry<String, LscDatasets>> entity = dao.findFirstByPivot(pivotValue);
+			Optional<Entry<String, LscDatasets>> entity = dao.findFirstByPivotAndFilter(pivotValue);
 			if (entity.isPresent()) {
 				IBean bean = beanClass.newInstance();
 				bean.setMainIdentifier(entity.get().getKey().toString());
