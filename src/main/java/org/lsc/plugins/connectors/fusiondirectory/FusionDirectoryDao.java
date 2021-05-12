@@ -262,7 +262,11 @@ public class FusionDirectoryDao {
 						if (value instanceof String && ((String)value).isEmpty()) { 
 							continue;
 						}
-						results.put(attribute.getValue(), raw.get(attribute.getValue()));
+						// LscBean does not accept Long object
+						if (value instanceof Long) {
+							value = ((Long)value).toString();
+						}
+						results.put(attribute.getValue(), value);
 					}
 					
 				} else {
