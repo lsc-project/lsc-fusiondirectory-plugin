@@ -246,7 +246,8 @@ public class FusionDirectoryDao {
 		
 		Response response = null;
 		try {
-			Map<String, Object> results = new HashMap<String, Object>();
+			Map<String, Object> results = new HashMap<>();
+			results.put(DN, dn);
 			for (AttributesTab attributesTab: attributesSettings.getTab()) {
 				WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(attributesTab.getName());
 				response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, token).get(Response.class);
