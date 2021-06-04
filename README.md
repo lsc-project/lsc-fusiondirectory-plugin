@@ -106,7 +106,7 @@ When using the destination service, the `mainIdentifier` holds the value of your
 
 ## Scripting
 
-` org.lsc.plugins.connectors.fusiondirectory.utils.FusionDirectorySearch` performs searches in Fusiondirectory and is useful for scripting.
+` org.lsc.plugins.connectors.fusiondirectory.utils.FusionDirectoryAPI` gives access to Fusiondirectory API and is useful for scripting.
 
 First, declare it as a customLibrary:
 
@@ -114,7 +114,7 @@ First, declare it as a customLibrary:
 <task>
 ...
 	<customLibrary>
-		<string>org.lsc.plugins.connectors.fusiondirectory.utils.FusionDirectorySearch</string>
+		<string>org.lsc.plugins.connectors.fusiondirectory.utils.FusionDirectoryAPI</string>
 	</customLibrary>
 </task>
 ```
@@ -126,7 +126,7 @@ Then, an instance of the class can be accessed in scripts using `custom[0]`:
   <name>member</name>
   <forceValues>
     <string><![CDATA[
-    var fdSearch = custom[0];
+    var fdAPI = custom[0];
     ...
      ]]></string>
   </forceValues>
@@ -136,8 +136,10 @@ Then, an instance of the class can be accessed in scripts using `custom[0]`:
 This library has available methods:
 
 * Log in FusionDirectory if no session has been previously opened: void connect(_endpoint_, _username_, _password_);
-* Search an entity withn base using ldap filter: List<String> search(_entity_, _base_, _filter_);
-* Get all attribute values for an entity with this DN: List<String> attribute(_entity_, _dn_, _attribute_);
+* Search entities DN within base using ldap filter: List<String> search(_entity_, _base_, _filter_);
+* Get attribute values for an entity with this DN: List<String> getAttributeValues(_entity_, _dn_, _attribute_);
+* Update entity single attribute value: void setAttribute(_entity_, _dn_, _tab_, _attribute_, _value_);
+* Update entity multiple attribute value: void setAttribute(_entity_, _dn_, _tab_, _attribute_, _values_);
 
 Here is a script example of resolving group members DN from AD to FusionDirectory:
 
@@ -146,8 +148,8 @@ Here is a script example of resolving group members DN from AD to FusionDirector
   <name>member</name>
   <forceValues>
     <string><![CDATA[
-      var fdSearch = custom[0];
-      fdSearch.connect('https://fd.example.com/rest.php/v1','fd-admin','secret');
+      var fdAPI = custom[0];
+      fdAPI.connect('https://fd.example.com/rest.php/v1','fd-admin','secret');
       var srcMembers = srcBean.getDatasetValuesById("member");
       var dstMembers = [];
       for (var i=0; i<srcMembers.size(); i++) {
@@ -158,7 +160,7 @@ Here is a script example of resolving group members DN from AD to FusionDirector
         } catch (e) {
           continue;
         }
-        var dstMember = fdSearch.search("USER","dc=example,dc=com","(uid=" + sAMAccountName + ")");
+        var dstMember = fdAPI.search("USER","dc=example,dc=com","(uid=" + sAMAccountName + ")");
         if (dstMember.size() != 1) { continue; }
         dstMembers.push(dstMember.get(0));
       }

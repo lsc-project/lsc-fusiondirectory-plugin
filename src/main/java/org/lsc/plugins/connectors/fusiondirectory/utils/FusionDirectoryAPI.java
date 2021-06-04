@@ -1,6 +1,7 @@
 package org.lsc.plugins.connectors.fusiondirectory.utils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -25,9 +26,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
-public class FusionDirectorySearch {
+public class FusionDirectoryAPI {
 	
-	private static final Logger LOGGER = LoggerFactory.getLogger(FusionDirectorySearch.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(FusionDirectoryAPI.class);
 	
 	private static final String DEFAULT = "default";
 	private static final String SESSION_TOKEN = "Session-Token";
@@ -36,7 +37,7 @@ public class FusionDirectorySearch {
 	private WebTarget target;
 	private String token;
 	
-	public FusionDirectorySearch() {
+	public FusionDirectoryAPI() {
 		// Instancied by LSC through customLibrary.
 	}
 	
@@ -146,7 +147,7 @@ public class FusionDirectorySearch {
 		return results;
 	}
 	
-	public List<String> attribute(String entity, String dn, String attribute) throws LscServiceException {
+	public List<String> getAttribute(String entity, String dn, String attribute) throws LscServiceException {
 		List<String> results = new ArrayList<>();
 		ObjectMapper mapper = new ObjectMapper();
 		Response response = null;
@@ -182,6 +183,35 @@ public class FusionDirectorySearch {
 			}
 		}
 		return results;
+	}
+	
+	public void setAttribute(String entity, String dn, String tab, String attribute, String value) throws LscServiceException {
+		setAttribute(entity, dn, tab,attribute, Arrays.asList(value), false);
+	}
+	
+	public void setAttribute(String entity, String dn, String tab, String attribute, List<String> values) throws LscServiceException {
+		setAttribute(entity, dn, tab,attribute, values, true);
+	}
+	
+	private void setAttribute(String entity, String dn, String tab, String attribute, List<String> values, boolean isMultiple) throws LscServiceException {
+		
+		Object payload = isMultiple ? values : "\"" + values.get(0) + "\"";
+		WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(tab).path(attribute);
+		Response response = null;
+		try {
+			response = currentTarget.request().header(SESSION_TOKEN, token).put(Entity.entity(payload, MediaType.APPLICATION_JSON));
+			if (!checkResponse(response)) {
+				String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
+						response.readEntity(String.class));
+				LOGGER.error(errorMessage);
+				throw new LscServiceException(errorMessage);
+			}
+		} finally {
+			if (response != null) {
+				response.close();
+			}
+		}
+		
 	}
 	
 	private String getDirectory(Optional<String> directory) {
