@@ -76,7 +76,7 @@ public class FusionDirectoryDstService implements IWritableService {
 					|| task.getPluginDestinationService().getAny().size() != 1 || !((task.getPluginDestinationService()
 							.getAny().get(0) instanceof ServiceSettings))) {
 				throw new LscServiceConfigurationException(
-						"Unable to identify the fusiondirectory service configuration inside the plugin source node of the task: "
+						"Unable to identify the fusiondirectory service configuration inside the plugin destination node of the task: "
 								+ task.getName());
 			}
 			ServiceSettings settings = (ServiceSettings) task.getPluginDestinationService()
