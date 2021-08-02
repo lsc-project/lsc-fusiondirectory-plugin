@@ -66,7 +66,7 @@ import org.lsc.configuration.PluginConnectionType;
 import org.lsc.configuration.ValuesType;
 import org.lsc.exception.LscServiceException;
 import org.lsc.plugins.connectors.fusiondirectory.beans.Login;
-import org.lsc.plugins.connectors.fusiondirectory.beans.Tabs;
+import org.lsc.plugins.connectors.fusiondirectory.beans.Tab;
 import org.lsc.plugins.connectors.fusiondirectory.generated.Attribute;
 import org.lsc.plugins.connectors.fusiondirectory.generated.Attributes;
 import org.lsc.plugins.connectors.fusiondirectory.generated.AttributesTab;
@@ -268,11 +268,25 @@ public class FusionDirectoryDao {
 			Map<String, Object> results = new HashMap<>();
 			results.put(DN, dn);
 
-			for (AttributesTab attributesTab: attributesSettings.getTab()) {
-				WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(attributesTab.getName());
-				response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, getToken()).get(Response.class);
+			// Check for inactive tabs before requesting them (if an inactive tab is requested, a 400 error is sent)
+			List<Tab> tabs = getEntityTabs(dn);
 
-				if (checkResponse(response)) {
+			for (AttributesTab attributesTab: attributesSettings.getTab()) {
+				Optional<Tab> tab = tabs.stream().filter(p -> p.getClass_().equals(attributesTab.getName())).findFirst();
+				if (!tab.isPresent()) {
+					String errorMessage = String.format("Tab %s do not exists for object %s", attributesTab.getName(), entity);
+					LOGGER.error(errorMessage);
+					throw new LscServiceException(errorMessage);
+				}
+				if (tab.get().getActive()) {
+					WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(attributesTab.getName());
+					response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, getToken()).get(Response.class);
+
+					if (!checkResponse(response)) {
+						String errorMessage = String.format("status: %d, message: %s", response.getStatus(), response.readEntity(String.class));
+						LOGGER.error(errorMessage);
+						throw new LscServiceException(errorMessage);
+					}
 					Map<String, Object> raw = mapper.readValue(response.readEntity(String.class), Map.class);
 					for (Attribute attribute : attributesTab.getAttribute()) {
 						Object value = raw.get(attribute.getValue());
@@ -288,12 +302,6 @@ public class FusionDirectoryDao {
 							value = ((Long)value).toString();
 						}
 						results.put(attribute.getValue(), value);
-					}
-
-				} else {
-					// If tab is inactive a 400 error is thrown.
-					for (Attribute attribute : attributesTab.getAttribute()) {
-						results.put(attribute.getValue(), null);
 					}
 				}
 			}
@@ -422,6 +430,26 @@ public class FusionDirectoryDao {
 			return true;
 		} else {
 			throw new LscServiceException(String.format("Cannot find entity %s", mainIdentifier));
+		}
+	}
+	private List<Tab> getEntityTabs(String dn) throws LscServiceException {
+		Response response = null;
+		try {
+			WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn);
+			response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, getToken()).get(Response.class);
+			if (!checkResponse(response)) {
+				String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
+						response.readEntity(String.class));
+				LOGGER.error(errorMessage);
+				throw new LscServiceException(errorMessage);
+			}
+			return Arrays.asList(mapper.readValue(response.readEntity(String.class), Tab[].class));
+		} catch (JsonProcessingException e) {
+			throw new LscServiceException(e);
+		} finally {
+			if (response != null) {
+				response.close();
+			}
 		}
 	}
 	private Map<String, Map<String, Object>> prepareAttributes(Map<String, List<Object>>  modificationsItemsByHash) throws LscServiceException {

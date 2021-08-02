@@ -2,7 +2,7 @@ package org.lsc.plugins.connectors.fusiondirectory.beans;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-public class Tabs {
+public class Tab {
 	
 	private String name;
 	
@@ -11,7 +11,7 @@ public class Tabs {
 	@JsonProperty("class")
 	private String class_;
 	
-	public Tabs() {
+	public Tab() {
 		super();
 	}
 	public String getName() {
