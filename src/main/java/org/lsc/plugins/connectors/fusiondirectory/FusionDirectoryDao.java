@@ -87,7 +87,7 @@ public class FusionDirectoryDao {
 	public static final String DEFAULT = "default";
 	private static final String SESSION_TOKEN = "Session-Token";
 	private static final String OBJECTS = "objects";
-	
+
 	private static final Logger LOGGER = LoggerFactory.getLogger(FusionDirectoryDao.class);
 
 	private final String entity;
@@ -199,16 +199,16 @@ public class FusionDirectoryDao {
 	public String getDirectory() {
 		return directory.map(p -> p).orElse(DEFAULT);
 	}
-	
+
 	public String getPivotName() {
 		return pivot.map(p -> p).orElse(UID);
 	}
 
 	public Map<String, LscDatasets> getList(Optional<String> computedFilter) throws LscServiceException {
-		
+
 		// Keeps session opened
 		ping();
-		
+
 		Map<String, LscDatasets> resources = new LinkedHashMap<>();
 		Response response = null;
 		try {
@@ -221,7 +221,7 @@ public class FusionDirectoryDao {
 			}
 			String pivotName = getPivotName();
 			currentTarget = currentTarget.queryParam("attrs["+pivotName+"]", "*");
-			
+
 			LOGGER.debug(String.format("Search %s from: %s ", entity, currentTarget.getUri().toString()));
 			response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, getToken()).get(Response.class);
 			if (!checkResponse(response)) {
@@ -259,10 +259,10 @@ public class FusionDirectoryDao {
 	}
 
 	public Map<String, Object> getDetails(String dn) throws LscServiceException {
-		
+
 		// Keeps session opened
 		ping();
-		
+
 		Response response = null;
 		try {
 			Map<String, Object> results = new HashMap<>();
@@ -280,7 +280,7 @@ public class FusionDirectoryDao {
 							throw new LscServiceException(String.format("Attribute %s could not be found in tab %s", attribute.getValue(), attributesTab.getName()));
 						}
 						// Empty string value are considered unset
-						if (value instanceof String && ((String)value).isEmpty()) { 
+						if (value instanceof String && ((String)value).isEmpty()) {
 							continue;
 						}
 						// LscBean does not accept Long object
@@ -289,7 +289,7 @@ public class FusionDirectoryDao {
 						}
 						results.put(attribute.getValue(), value);
 					}
-					
+
 				} else {
 					// If tab is inactive a 400 error is thrown.
 					for (Attribute attribute : attributesTab.getAttribute()) {
@@ -313,7 +313,7 @@ public class FusionDirectoryDao {
 		String computedFilter = filter.map(f -> "(&" + f  + pivotFilter.toString() + ")").orElse(pivotFilter.toString());
 		return getList(Optional.of(computedFilter)).entrySet().stream().findFirst();
 	}
-	
+
 	public Optional<Entry<String, LscDatasets>> findFirstByPivot(String pivotValue) throws LscServiceException {
 		StringBuilder pivotFilter = new StringBuilder();
 		pivotFilter.append("(").append(getPivotName()).append("=").append(pivotValue).append(")");
@@ -331,10 +331,10 @@ public class FusionDirectoryDao {
 	}
 
 	public boolean create(Map<String, List<Object>> modificationsItemsByHash) throws LscServiceException {
-		
+
 		// Keeps session opened
 		ping();
-		
+
 		Map<String, Object> payload = new HashMap<String, Object>();
 		payload.put("attrs", prepareAttributes(modificationsItemsByHash));
 		if (template.isPresent()) {
@@ -355,26 +355,26 @@ public class FusionDirectoryDao {
 				response.close();
 			}
 		}
-		
+
 		return true;
 	}
 
 	public boolean modify(String mainIdentifier, Map<String, List<Object>> modificationsItemsByHash) throws LscServiceException {
-		
+
 		// Keeps session opened
 		ping();
-		
+
 		// retrieve DN
 		Optional<Entry<String, LscDatasets>> entry = findFirstByPivot(mainIdentifier);
-		
+
 		if (entry.isPresent()) {
 			String dn = entry.get().getValue().getStringValueAttribute(FusionDirectoryDao.DN);
-			
+
 			Map<String, Map<String, Object>> attributes = prepareAttributes(modificationsItemsByHash);
-			
+
 			WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn);
 			currentTarget.property(HttpUrlConnectorProvider.SET_METHOD_WORKAROUND, true);
-			
+
 			Response response = null;
 			try {
 				response = currentTarget.request().header(SESSION_TOKEN, getToken()).method("PATCH", Entity.entity(attributes, MediaType.APPLICATION_JSON));
@@ -389,7 +389,7 @@ public class FusionDirectoryDao {
 					response.close();
 				}
 			}
-			
+
 			return true;
 		} else {
 			throw new LscServiceException(String.format("Cannot find entity %s", mainIdentifier));
@@ -397,10 +397,10 @@ public class FusionDirectoryDao {
 	}
 
 	public boolean delete(String mainIdentifier) throws LscServiceException {
-		
+
 		// Keeps session opened
 		ping();
-		
+
 		Optional<Entry<String, LscDatasets>> entry = findFirstByPivot(mainIdentifier);
 		if (entry.isPresent()) {
 			String dn = entry.get().getValue().getStringValueAttribute(FusionDirectoryDao.DN);
@@ -439,7 +439,7 @@ public class FusionDirectoryDao {
 				else {
 					if (!list.isEmpty()) {
 						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list.get(0));
-					} else { 
+					} else {
 						// Attribute removal
 						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), "");
 					}
@@ -452,11 +452,11 @@ public class FusionDirectoryDao {
 	}
 	private TabAttribute getTabAttribute(String attribute) throws LscServiceException {
 		TabAttribute tabAttribute = null;
-		
+
 		for (AttributesTab attributesTab: attributesSettings.getTab()) {
 			for (Attribute someAttribute : attributesTab.getAttribute()) {
 				if (someAttribute.getValue().equalsIgnoreCase(attribute)) {
-					tabAttribute = new TabAttribute(attributesTab.getName(), someAttribute); 
+					tabAttribute = new TabAttribute(attributesTab.getName(), someAttribute);
 				}
 			}
 		}
