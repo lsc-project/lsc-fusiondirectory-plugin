@@ -2,6 +2,7 @@ package org.lsc.plugins.connectors.fusiondirectory.utils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -27,20 +28,23 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 public class FusionDirectoryAPI {
-	
+
 	private static final Logger LOGGER = LoggerFactory.getLogger(FusionDirectoryAPI.class);
-	
+
 	private static final String DEFAULT = "default";
 	private static final String SESSION_TOKEN = "Session-Token";
 	private static final String OBJECTS = "objects";
 
 	private WebTarget target;
-	private String token;
 	
+	// Keep one token / thread worker
+	private Map<String, String> tokenCache;
+
 	public FusionDirectoryAPI() {
 		// Instancied by LSC through customLibrary.
+		tokenCache = new HashMap<>();
 	}
-	
+
 	private WebTarget getTarget(String endpoint) {
 		if (target == null) {
 			Client client = ClientBuilder.newClient().register(new JacksonFeature());
@@ -48,11 +52,11 @@ public class FusionDirectoryAPI {
 		}
 		return target;
 	}
-	
+
 	public void connect(String endpoint, String username, String password) throws LscServiceException {
 		connect(endpoint, username, password, null);
 	}
-	
+
 	public void connect(String endpoint, String username, String password, String directory) throws LscServiceException {
 		if (!ping(endpoint)) {
 			target = getTarget(endpoint);
@@ -69,7 +73,10 @@ public class FusionDirectoryAPI {
 					LOGGER.error(errorMessage);
 					throw new LscServiceException(errorMessage);
 				}
-				token = response.readEntity(String.class).replaceAll("\n", "").replaceAll("\"", "");
+				String token = response.readEntity(String.class).replaceAll("\n", "").replaceAll("\"", "");
+				synchronized (tokenCache) {
+					tokenCache.put(String.valueOf(Thread.currentThread().getId()), token);
+				}
 			} finally {
 				if (response != null) {
 					response.close();
@@ -78,7 +85,14 @@ public class FusionDirectoryAPI {
 		}
 	}
 	
+	private String getToken() {
+		synchronized (tokenCache) {
+			return tokenCache.get(String.valueOf(Thread.currentThread().getId()));
+		}
+	}
+
 	private boolean ping(String endpoint) throws LscServiceException {
+		String token = getToken();
 		if (token != null) {
 			Response response = null;
 			try {
@@ -100,7 +114,7 @@ public class FusionDirectoryAPI {
 		}
 		return false;
 	}
-	
+
 	public List<String> search(String entity) throws LscServiceException {
 		return search(entity, null);
 	}
@@ -108,10 +122,10 @@ public class FusionDirectoryAPI {
 		return search(entity, baseString, null);
 	}
 	public List<String> search(String entity, String baseString, String filterString) throws LscServiceException {
-		
+
 		Optional<String> base = optional(baseString);
 		Optional<String> filter = optional(filterString);
-		
+
 		List<String> results = new ArrayList<>();
 		ObjectMapper mapper = new ObjectMapper();
 		Response response = null;
@@ -123,8 +137,8 @@ public class FusionDirectoryAPI {
 			if (filter.isPresent()) {
 				currentTarget = currentTarget.queryParam("filter", filter.get());
 			}
-			
-			response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, token).get(Response.class);
+
+			response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, getToken()).get(Response.class);
 			if (!checkResponse(response)) {
 				String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
 						response.readEntity(String.class));
@@ -146,7 +160,7 @@ public class FusionDirectoryAPI {
 		}
 		return results;
 	}
-	
+
 	public List<String> getAttribute(String entity, String dn, String attribute) throws LscServiceException {
 		List<String> results = new ArrayList<>();
 		ObjectMapper mapper = new ObjectMapper();
@@ -156,7 +170,7 @@ public class FusionDirectoryAPI {
 			currentTarget = currentTarget.queryParam("base", dn);
 			currentTarget = currentTarget.queryParam("attrs["+attribute+"]", "*");
 
-			response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, token).get(Response.class);
+			response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, getToken()).get(Response.class);
 			if (!checkResponse(response)) {
 				String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
 						response.readEntity(String.class));
@@ -184,22 +198,22 @@ public class FusionDirectoryAPI {
 		}
 		return results;
 	}
-	
+
 	public void setAttribute(String entity, String dn, String tab, String attribute, String value) throws LscServiceException {
 		setAttribute(entity, dn, tab,attribute, Arrays.asList(value), false);
 	}
-	
+
 	public void setAttribute(String entity, String dn, String tab, String attribute, List<String> values) throws LscServiceException {
 		setAttribute(entity, dn, tab,attribute, values, true);
 	}
-	
+
 	private void setAttribute(String entity, String dn, String tab, String attribute, List<String> values, boolean isMultiple) throws LscServiceException {
-		
+
 		Object payload = isMultiple ? values : "\"" + values.get(0) + "\"";
 		WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(tab).path(attribute);
 		Response response = null;
 		try {
-			response = currentTarget.request().header(SESSION_TOKEN, token).put(Entity.entity(payload, MediaType.APPLICATION_JSON));
+			response = currentTarget.request().header(SESSION_TOKEN, getToken()).put(Entity.entity(payload, MediaType.APPLICATION_JSON));
 			if (!checkResponse(response)) {
 				String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
 						response.readEntity(String.class));
@@ -211,17 +225,17 @@ public class FusionDirectoryAPI {
 				response.close();
 			}
 		}
-		
+
 	}
-	
+
 	private String getDirectory(Optional<String> directory) {
 		return directory.map(p -> p).orElse(DEFAULT);
 	}
-	
+
 	private static boolean checkResponse(Response response) {
 		return Response.Status.Family.familyOf(response.getStatus()) == Response.Status.Family.SUCCESSFUL;
 	}
-	
+
 	private Optional<String> optional(String string) {
 		return Optional.ofNullable(string).filter(f -> !f.trim().isEmpty());
 	}
