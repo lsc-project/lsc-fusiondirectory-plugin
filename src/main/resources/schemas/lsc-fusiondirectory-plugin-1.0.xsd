@@ -17,6 +17,7 @@
 		<xsd:simpleContent>
 			<xsd:extension base="xsd:string">
 				<xsd:attribute name="multiple" type="xsd:boolean" default="false" use="optional" />
+				<xsd:attribute name="passwordHash" type="xsd:string" use="optional" />
 			</xsd:extension>
 		</xsd:simpleContent>
 	</xsd:complexType>

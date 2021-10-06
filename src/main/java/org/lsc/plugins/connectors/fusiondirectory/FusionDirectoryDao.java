@@ -380,24 +380,42 @@ public class FusionDirectoryDao {
 
 			Map<String, Map<String, Object>> attributes = prepareAttributes(modificationsItemsByHash);
 
-			WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn);
-			currentTarget.property(HttpUrlConnectorProvider.SET_METHOD_WORKAROUND, true);
-
-			Response response = null;
-			try {
-				response = currentTarget.request().header(SESSION_TOKEN, getToken()).method("PATCH", Entity.entity(attributes, MediaType.APPLICATION_JSON));
-				if (!checkResponse(response)) {
-					String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
-							response.readEntity(String.class));
-					LOGGER.error(errorMessage);
-					throw new LscServiceException(errorMessage);
-				}
-			} finally {
-				if (response != null) {
-					response.close();
+			if (attributes.size() > 0) {
+				WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn);
+				currentTarget.property(HttpUrlConnectorProvider.SET_METHOD_WORKAROUND, true);
+				Response response = null;
+				try {
+					response = currentTarget.request().header(SESSION_TOKEN, getToken()).method("PATCH", Entity.entity(attributes, MediaType.APPLICATION_JSON));
+					if (!checkResponse(response)) {
+						String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
+								response.readEntity(String.class));
+						LOGGER.error(errorMessage);
+						throw new LscServiceException(errorMessage);
+					}
+				} finally {
+					if (response != null) {
+						response.close();
+					}
 				}
 			}
-
+			List<String> toDelete = prepareAttributesToDelete(modificationsItemsByHash);
+			for (String deleteAttr: toDelete) {
+				Response response = null;
+				try {
+					WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(deleteAttr);
+					response = currentTarget.request().header(SESSION_TOKEN, getToken()).delete();
+					if (!checkResponse(response)) {
+						String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
+								response.readEntity(String.class));
+						LOGGER.error(errorMessage);
+						throw new LscServiceException(errorMessage);
+					}
+				} finally {
+					if (response != null) {
+						response.close();
+					}
+				}
+			}
 			return true;
 		} else {
 			throw new LscServiceException(String.format("Cannot find entity %s", mainIdentifier));
@@ -452,24 +470,43 @@ public class FusionDirectoryDao {
 			}
 		}
 	}
+
+	private List<String> prepareAttributesToDelete(Map<String, List<Object>>  modificationsItemsByHash) throws LscServiceException {
+		List<String> toDelete = new ArrayList<>();
+		for (String attribute: modificationsItemsByHash.keySet()) {
+			TabAttribute tabAttribute = getTabAttribute(attribute);
+			if (modificationsItemsByHash.get(attribute) instanceof ArrayList<?>) {
+				if (((ArrayList<?>) modificationsItemsByHash.get(attribute)).isEmpty() && !tabAttribute.getAttribute().isMultiple()) {
+					toDelete.add(tabAttribute.getTab() + "/" + tabAttribute.getAttribute().getValue());
+				}
+			} else {
+				throw new LscServiceException(String.format("%s is not a supported type for attribute %s",modificationsItemsByHash.get(attribute).getClass().toString(), attribute));
+			}
+		}
+		return toDelete;
+	}
+
 	private Map<String, Map<String, Object>> prepareAttributes(Map<String, List<Object>>  modificationsItemsByHash) throws LscServiceException {
 		Map<String, Map<String, Object>> attrs =  new HashMap<String, Map<String, Object>>();
 		for (String attribute: modificationsItemsByHash.keySet()) {
 			TabAttribute tabAttribute = getTabAttribute(attribute);
-			if (attrs.get(tabAttribute.getTab()) == null) {
-				attrs.put(tabAttribute.getTab(), new HashMap<String, Object>());
-			}
 			if (modificationsItemsByHash.get(attribute) instanceof ArrayList<?>) {
 				ArrayList<?> list = (ArrayList<?>) modificationsItemsByHash.get(attribute);
-				if (tabAttribute.getAttribute().isMultiple()) {
-					attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list);
-				}
-				else {
-					if (!list.isEmpty()) {
-						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list.get(0));
-					} else {
-						// Attribute removal
-						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), "");
+				if (!list.isEmpty() || tabAttribute.getAttribute().isMultiple()) {
+					if (attrs.get(tabAttribute.getTab()) == null) {
+						attrs.put(tabAttribute.getTab(), new HashMap<String, Object>());
+					}
+					if (tabAttribute.getAttribute().isMultiple()) {
+						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list);
+					}
+					else {
+						if (tabAttribute.getAttribute().getPasswordHash() == null) {
+							attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list.get(0));
+						} else {
+							// specific use case for userPassword attribute: need to be sent as an array with hash to be set, otherwise new password is ignored by Fusiondirectory if it was not set
+							String[] passwordArr = { tabAttribute.getAttribute().getPasswordHash(), (String)list.get(0), (String)list.get(0), "", "" };
+							attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), passwordArr);
+						}
 					}
 				}
 			} else {

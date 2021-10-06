@@ -86,7 +86,7 @@ Example of a destination service :
                 <fusiondirectory:attribute>sn</fusiondirectory:attribute>
                 <fusiondirectory:attribute>givenName</fusiondirectory:attribute>
                 <fusiondirectory:attribute multiple="true">title</fusiondirectory:attribute>
-                <fusiondirectory:attribute>userPassword</fusiondirectory:attribute>
+                <fusiondirectory:attribute passwordHash="clear">userPassword</fusiondirectory:attribute>
             </fusiondirectory:tab>
             <fusiondirectory:tab name="mailAccount">
                 <fusiondirectory:attribute>mail</fusiondirectory:attribute>
@@ -101,6 +101,21 @@ Multiple attributes in Fusiondirectory must be declared as so:
 ```
 <fusiondirectory:attribute multiple="true">title</fusiondirectory:attribute>
 ```
+
+Attribute user/userPassword may define a passwordHash with a value chosen from Fusiondirectory > Configuration > Password settings > allowed password hashes:
+
+```
+<fusiondirectory:attribute passwordHash="clear">userPassword</fusiondirectory:attribute>
+```
+
+When attribute `passwordHash` is set, the password will be sent as an array `[%passwordHash%,%newpassword%,%newpassword%,"",""]` to instruct FusionDirectory how to hash password before storing it into OpenLDAP.
+
+Tips:
+
+* To allow Fusiondirectory to create a new user without any password, configure "empty" in Fusiondirectory Configuration > Password settings > Password default hash.
+* `passwordHash="clear"` can be used to let OpenLDAP apply its own hashing rules.
+
+### propertiesBasedSyncOptions
 
 When using the destination service, the `mainIdentifier` holds the value of your pivot attribute, while the `base` attribute holds the location where the entity will be created or moved to.
 
