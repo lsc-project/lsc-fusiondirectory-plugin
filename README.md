@@ -6,7 +6,7 @@ A Fusiondirectory connector for LSC (LDAP Synchronization Connector)
 
 This plugin synchronizes Fusiondirectory entities from/to another LSC compatible source/destination.
 
-This plugin uses [FusionDirectory REST API](https://rest-api.fusiondirectory.info/), available in version 4.
+This plugin uses [FusionDirectory REST API](https://rest-api.fusiondirectory.org/), available in version 4.
 
 ## Configuration
 
