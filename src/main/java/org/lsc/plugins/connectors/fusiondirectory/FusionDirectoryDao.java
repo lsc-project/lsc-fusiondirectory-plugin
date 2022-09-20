@@ -51,6 +51,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.ws.rs.client.Client;
 import javax.ws.rs.client.ClientBuilder;
@@ -85,6 +87,7 @@ public class FusionDirectoryDao {
 	public static final String UID = "uid";
 	public static final String DN = "dn";
 	public static final String DEFAULT = "default";
+	public static final Pattern PATTERN_ATTR_OPT = Pattern.compile("^(\\w+);(.*)$");
 	private static final String SESSION_TOKEN = "Session-Token";
 	private static final String OBJECTS = "objects";
 
@@ -289,19 +292,31 @@ public class FusionDirectoryDao {
 					}
 					Map<String, Object> raw = mapper.readValue(response.readEntity(String.class), Map.class);
 					for (Attribute attribute : attributesTab.getAttribute()) {
-						Object value = raw.get(attribute.getValue());
-						if (value == null) {
-							throw new LscServiceException(String.format("Attribute %s could not be found in tab %s", attribute.getValue(), attributesTab.getName()));
+						if (isOptionAttribute(attribute.getValue())) {
+							String shortAttributeName = stripOptionFromAttributeName(attribute.getValue());
+							Object rawValues = raw.get(shortAttributeName);
+							if (rawValues == null) {
+								throw new LscServiceException(String.format("Attribute %s could not be found in tab %s", shortAttributeName, attributesTab.getName()));
+							}
+							Object value = filterAndStripOptionFromValues(attribute.getValue(), rawValues);
+							if (value != null) {
+								results.put(attribute.getValue(), value);
+							}
+						} else {
+							Object value = raw.get(attribute.getValue());
+							if (value == null) {
+								throw new LscServiceException(String.format("Attribute %s could not be found in tab %s", attribute.getValue(), attributesTab.getName()));
+							}
+							// Empty string value are considered unset
+							if (value instanceof String && ((String)value).isEmpty()) {
+								continue;
+							}
+							// LscBean does not accept Long object
+							if (value instanceof Long) {
+								value = ((Long)value).toString();
+							}
+							results.put(attribute.getValue(), value);
 						}
-						// Empty string value are considered unset
-						if (value instanceof String && ((String)value).isEmpty()) {
-							continue;
-						}
-						// LscBean does not accept Long object
-						if (value instanceof Long) {
-							value = ((Long)value).toString();
-						}
-						results.put(attribute.getValue(), value);
 					}
 				}
 			}
@@ -476,7 +491,9 @@ public class FusionDirectoryDao {
 		for (String attribute: modificationsItemsByHash.keySet()) {
 			TabAttribute tabAttribute = getTabAttribute(attribute);
 			if (modificationsItemsByHash.get(attribute) instanceof ArrayList<?>) {
-				if (((ArrayList<?>) modificationsItemsByHash.get(attribute)).isEmpty() && !tabAttribute.getAttribute().isMultiple()) {
+				if (((ArrayList<?>) modificationsItemsByHash.get(attribute)).isEmpty() 
+						&& !tabAttribute.getAttribute().isMultiple()
+						&& !tabAttribute.isOption()) {
 					toDelete.add(tabAttribute.getTab() + "/" + tabAttribute.getAttribute().getValue());
 				}
 			} else {
@@ -492,21 +509,25 @@ public class FusionDirectoryDao {
 			TabAttribute tabAttribute = getTabAttribute(attribute);
 			if (modificationsItemsByHash.get(attribute) instanceof ArrayList<?>) {
 				ArrayList<?> list = (ArrayList<?>) modificationsItemsByHash.get(attribute);
-				if (!list.isEmpty() || tabAttribute.getAttribute().isMultiple()) {
+				if (!list.isEmpty() || tabAttribute.getAttribute().isMultiple() || tabAttribute.isOption()) {
 					if (attrs.get(tabAttribute.getTab()) == null) {
 						attrs.put(tabAttribute.getTab(), new HashMap<String, Object>());
 					}
-					if (tabAttribute.getAttribute().isMultiple()) {
+					if (tabAttribute.isOption()) {
+						String attributeShortName=tabAttribute.stripOptionFromAttributeName();
+						attrs.get(tabAttribute.getTab()).put(attributeShortName,
+								tabAttribute.getOptionValues(attrs.get(tabAttribute.getTab()).get(attributeShortName), list));
+					}
+					else if (tabAttribute.getAttribute().isMultiple()) {
 						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list);
 					}
+					else if (tabAttribute.getAttribute().getPasswordHash() != null) {
+						// specific use case for userPassword attribute: need to be sent as an array with hash to be set, otherwise new password is ignored by Fusiondirectory if it was not set
+						String[] passwordArr = { tabAttribute.getAttribute().getPasswordHash(), (String)list.get(0), (String)list.get(0), "", "" };
+						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), passwordArr);
+					}
 					else {
-						if (tabAttribute.getAttribute().getPasswordHash() == null) {
-							attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list.get(0));
-						} else {
-							// specific use case for userPassword attribute: need to be sent as an array with hash to be set, otherwise new password is ignored by Fusiondirectory if it was not set
-							String[] passwordArr = { tabAttribute.getAttribute().getPasswordHash(), (String)list.get(0), (String)list.get(0), "", "" };
-							attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), passwordArr);
-						}
+						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list.get(0));
 					}
 				}
 			} else {
@@ -514,6 +535,34 @@ public class FusionDirectoryDao {
 			}
 		}
 		return attrs;
+	}
+	public static boolean isOptionAttribute(String attribute) {
+		return PATTERN_ATTR_OPT.matcher(attribute).matches();
+	}
+	public static String stripOptionFromAttributeName(String attribute) {
+		Matcher mopt = PATTERN_ATTR_OPT.matcher(attribute);
+		if (mopt.matches()) {
+			return mopt.group(1);
+		}
+		return attribute;
+	}
+	@SuppressWarnings("unchecked")
+	private List<String> filterAndStripOptionFromValues(String attribute, Object rawValues) {
+		Matcher mopt = PATTERN_ATTR_OPT.matcher(attribute);
+		List<String> values = new ArrayList<String>();
+		if (mopt.matches()) {
+			String option = mopt.group(2);
+			if (rawValues instanceof String && ((String) rawValues).toLowerCase().startsWith(option.toLowerCase() + ";")) {
+				values.add(((String) rawValues).replaceAll("(?i)" + option + ";", ""));
+			} else if (rawValues instanceof List<?>) {
+				for (Object rawValue: (List<Object>)rawValues) {
+					if (((String) rawValue).toLowerCase().startsWith(option.toLowerCase() + ";")) {
+						values.add(((String) rawValue).replaceAll("(?i)" + option + ";", ""));
+					}
+				}
+			}
+		}
+		return values;
 	}
 	private TabAttribute getTabAttribute(String attribute) throws LscServiceException {
 		TabAttribute tabAttribute = null;
@@ -542,6 +591,31 @@ public class FusionDirectoryDao {
 		}
 		public Attribute getAttribute() {
 			return attribute;
+		}
+		public boolean isOption() {
+			return FusionDirectoryDao.isOptionAttribute(attribute.getValue());
+		}
+		public String stripOptionFromAttributeName() {
+			return FusionDirectoryDao.stripOptionFromAttributeName(attribute.getValue());
+		}
+		@SuppressWarnings("unchecked")
+		public Object getOptionValues(Object currentValues, ArrayList<?> list) {
+			List<String> newValues = new ArrayList<>();
+			Matcher mopt = PATTERN_ATTR_OPT.matcher(attribute.getValue());
+			if (mopt.matches()) {
+				String option = mopt.group(2);
+				if (currentValues != null) {
+					if (currentValues instanceof String) {
+						newValues.add((String)currentValues);
+					} else if (currentValues instanceof List<?>) {
+						newValues.addAll((List<? extends String>)currentValues);
+					}
+				}
+				for (Object value: list) {
+					newValues.add(option.toLowerCase() + ";" + (String)value);
+				}
+			}
+			return newValues;
 		}
 	}
 }
