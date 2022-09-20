@@ -523,8 +523,8 @@ public class FusionDirectoryDao {
 					}
 					else if (tabAttribute.getAttribute().getPasswordHash() != null) {
 						// specific use case for userPassword attribute: need to be sent as an array with hash to be set, otherwise new password is ignored by Fusiondirectory if it was not set
-						String[] passwordArr = { tabAttribute.getAttribute().getPasswordHash(), (String)list.get(0), (String)list.get(0), "", "" };
-						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), passwordArr);
+						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(),
+								getPasswordArray(list.get(0), tabAttribute.getAttribute().getPasswordHash()));
 					}
 					else {
 						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list.get(0));
@@ -535,6 +535,12 @@ public class FusionDirectoryDao {
 			}
 		}
 		return attrs;
+	}
+	private String[] getPasswordArray(Object somePassword, String passwordHash) {
+		String userPassword = somePassword instanceof String ? (String)somePassword :
+			somePassword instanceof byte[] ? new String((byte[])somePassword) : somePassword.toString();
+		String[] passwordArr = { passwordHash, userPassword, userPassword, "", "" };
+		return passwordArr;
 	}
 	public static boolean isOptionAttribute(String attribute) {
 		return PATTERN_ATTR_OPT.matcher(attribute).matches();
