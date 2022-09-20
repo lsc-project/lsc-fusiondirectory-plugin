@@ -100,9 +100,7 @@ public class FusionDirectoryDstService implements IWritableService {
 		LOGGER.debug(String.format("Call to getBean(%s, %s, %b)", pivotValue, lscDatasets, fromSameService));
 		String pivotName = dao.getPivotName();
 		try {
-			
-			String pivotAttribute = lscDatasets.getAttributesNames().get(0);
-			Optional<Entry<String, LscDatasets>> entity = dao.findFirstByPivot(lscDatasets.getStringValueAttribute(pivotAttribute));
+			Optional<Entry<String, LscDatasets>> entity = dao.findFirstByPivots(lscDatasets, false);
 			if (entity.isPresent()) {
 				String dn = entity.get().getValue().getStringValueAttribute(FusionDirectoryDao.DN);
 				

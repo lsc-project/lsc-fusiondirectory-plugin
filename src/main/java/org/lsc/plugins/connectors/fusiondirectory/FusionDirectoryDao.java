@@ -42,6 +42,7 @@
  */
 package org.lsc.plugins.connectors.fusiondirectory;
 
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -90,7 +91,6 @@ public class FusionDirectoryDao {
 	public static final Pattern PATTERN_ATTR_OPT = Pattern.compile("^(\\w+);(.*)$");
 	private static final String SESSION_TOKEN = "Session-Token";
 	private static final String OBJECTS = "objects";
-
 	private static final Logger LOGGER = LoggerFactory.getLogger(FusionDirectoryDao.class);
 
 	private final String entity;
@@ -100,6 +100,9 @@ public class FusionDirectoryDao {
 	private final Optional<String> directory;
 	private final Optional<String> base;
 	private final Optional<String> filter;
+	private final Optional<String> allFilter;
+	private final Optional<String> oneFilter;
+	private final Optional<String> cleanFilter;
 	private final Optional<String> template;
 	private final Attributes attributesSettings;
 
@@ -117,6 +120,9 @@ public class FusionDirectoryDao {
 		this.pivot = getStringParameter(settings.getPivot());
 		this.base = getStringParameter(settings.getBase());
 		this.filter = getStringParameter(settings.getFilter());
+		this.allFilter = getStringParameter(settings.getAllFilter());
+		this.oneFilter = getStringParameter(settings.getOneFilter());
+		this.cleanFilter = getStringParameter(settings.getCleanFilter());
 		this.directory = getStringParameter(settings.getDirectory());
 		this.template = getStringParameter(settings.getTemplate());
 		this.attributesSettings = settings.getAttributes();
@@ -196,7 +202,7 @@ public class FusionDirectoryDao {
 	}
 
 	public Map<String, LscDatasets> getList() throws LscServiceException {
-		return getList(filter);
+		return getList(allFilter.isPresent() ? allFilter : filter);
 	}
 
 	public String getDirectory() {
@@ -261,6 +267,7 @@ public class FusionDirectoryDao {
 		return Response.Status.Family.familyOf(response.getStatus()) == Response.Status.Family.SUCCESSFUL;
 	}
 
+	@SuppressWarnings("unchecked")
 	public Map<String, Object> getDetails(String dn) throws LscServiceException {
 
 		// Keeps session opened
@@ -330,13 +337,24 @@ public class FusionDirectoryDao {
 		}
 	}
 
-	public Optional<Entry<String, LscDatasets>> findFirstByPivotAndFilter(String pivotValue) throws LscServiceException {
-		StringBuilder pivotFilter = new StringBuilder();
-		pivotFilter.append("(").append(getPivotName()).append("=").append(pivotValue).append(")");
-		String computedFilter = filter.map(f -> "(&" + f  + pivotFilter.toString() + ")").orElse(pivotFilter.toString());
-		return getList(Optional.of(computedFilter)).entrySet().stream().findFirst();
+	public Optional<Entry<String, LscDatasets>> findFirstByPivots(LscDatasets pivots, boolean clean) throws LscServiceException {
+		Optional<String> computedFilter = clean ? cleanFilter : oneFilter;
+		if (computedFilter.isPresent()) {
+			for (String somePivot : pivots.getAttributesNames()) {
+				computedFilter =  Optional.of(Pattern.compile("\\{" + somePivot + "\\}", Pattern.CASE_INSENSITIVE)
+					.matcher(computedFilter.get()).replaceAll(Matcher.quoteReplacement(pivots.getValueForFilter(somePivot.toLowerCase()))));
+			}
+		} else {
+			StringBuilder pivotFilter = new StringBuilder("(|");
+			for (String somePivot : pivots.getAttributesNames()) {
+				pivotFilter.append("(").append(getPivotName()).append("=").append(pivots.getValueForFilter(somePivot.toLowerCase())).append(")");
+			}
+			pivotFilter.append(")");
+			computedFilter = Optional.of(filter.map(f -> "(&" + f  + pivotFilter.toString() + ")").orElse(pivotFilter.toString()));
+		}
+		return getList(computedFilter).entrySet().stream().findFirst();
 	}
-
+	
 	public Optional<Entry<String, LscDatasets>> findFirstByPivot(String pivotValue) throws LscServiceException {
 		StringBuilder pivotFilter = new StringBuilder();
 		pivotFilter.append("(").append(getPivotName()).append("=").append(pivotValue).append(")");
@@ -445,6 +463,7 @@ public class FusionDirectoryDao {
 		Optional<Entry<String, LscDatasets>> entry = findFirstByPivot(mainIdentifier);
 		if (entry.isPresent()) {
 			String dn = entry.get().getValue().getStringValueAttribute(FusionDirectoryDao.DN);
+			LOGGER.debug(String.format("Deleting %s with dn=%s", entity, dn));
 			WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn);
 			Response response = null;
 			try {
