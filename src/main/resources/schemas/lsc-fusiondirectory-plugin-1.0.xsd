@@ -39,6 +39,9 @@
 						<xsd:element name="pivot" type="xsd:string" minOccurs="0" />
 						<xsd:element name="base" type="xsd:string" minOccurs="0" />
 						<xsd:element name="filter" type="xsd:string" minOccurs="0" />
+						<xsd:element name="allFilter" type="xsd:string" minOccurs="0" />
+						<xsd:element name="oneFilter" type="xsd:string" minOccurs="0" />
+						<xsd:element name="cleanFilter" type="xsd:string" minOccurs="0" />
 						<xsd:element name="template" type="xsd:string" minOccurs="0" />
 						<xsd:element name="attributes" type="attributes" minOccurs="0" />
 					</xsd:sequence>

@@ -114,7 +114,7 @@ public class FusionDirectorySrcService implements IService {
 		if (fromSameService) {
 			return getBeanFromSameService(pivotRawValue, lscDatasets.getStringValueAttribute(FusionDirectoryDao.DN));
 		} else {
-			return getBeanForClean(lscDatasets.getStringValueAttribute(dao.getPivotName()));
+			return getBeanForClean(lscDatasets.getStringValueAttribute(dao.getPivotName()), lscDatasets);
 		}
 	}
 
@@ -145,10 +145,10 @@ public class FusionDirectorySrcService implements IService {
 		}
 	}
 
-	private IBean getBeanForClean(String pivotValue) throws LscServiceException {
+	private IBean getBeanForClean(String pivotValue, LscDatasets pivots) throws LscServiceException {
 		String pivotName = dao.getPivotName();
 		try {
-			Optional<Entry<String, LscDatasets>> entity = dao.findFirstByPivotAndFilter(pivotValue);
+			Optional<Entry<String, LscDatasets>> entity = dao.findFirstByPivots(pivots, true);
 			if (entity.isPresent()) {
 				IBean bean = beanClass.newInstance();
 				bean.setMainIdentifier(entity.get().getKey().toString());

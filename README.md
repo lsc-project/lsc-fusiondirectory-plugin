@@ -6,7 +6,7 @@ A Fusiondirectory connector for LSC (LDAP Synchronization Connector)
 
 This plugin synchronizes Fusiondirectory entities from/to another LSC compatible source/destination.
 
-This plugin uses [FusionDirectory REST API](https://rest-api.fusiondirectory.org/), available in version 4.
+This plugin uses [FusionDirectory REST API](https://rest-api.fusiondirectory.info/), available in version 4.
 
 ## Configuration
 
@@ -115,9 +115,36 @@ Tips:
 * To allow Fusiondirectory to create a new user without any password, configure "empty" in Fusiondirectory Configuration > Password settings > Password default hash.
 * `passwordHash="clear"` can be used to let OpenLDAP apply its own hashing rules.
 
+#### Filters
+
+You *may* defined these filters to retrieve objects:
+
+* _allFilter_: filter to retrieve all entries during sync phase or clean phase.
+* _oneFilter_: computed filter to retrieve one entry in destination during sync phase (you can use pivot name as placeholder eg. `(uid={cn})`) like in a regular LSC connector. 
+* _cleanFilter_: computed filter to retrieve one entry in source during clean phase (you can use pivot name as placeholder eg. `(uid={cn})`) like in a regular LSC connector.
+* _filter_: Default filter to retrieve all or individual entries during sync phase or clean phase.
+
+If no filters are defined, the connector will retrieve all entries of type _entity_ in _base_ branch and retrieve individual entries based on its _pivot_ attribute matching the pivot value(s) of the source entry.
+
 ### propertiesBasedSyncOptions
 
-When using the destination service, the `mainIdentifier` holds the value of your pivot attribute, while the `base` attribute holds the location where the entity will be created or moved to.
+When using the destination service, the `mainIdentifier` holds the value of your pivot attribute:
+
+```
+<mainIdentifier><![CDATA[ srcBean.getDatasetFirstValueById("uid") ]]></mainIdentifier>
+```
+
+The `base` attribute holds the location where the entity will be created or moved to:
+
+```
+<dataset>
+    <name>base</name>
+    <policy>FORCE</policy>
+    <forceValues>
+        <string><![CDATA["ou=hr,dc=company,dc=com"]]></string>
+    </forceValues>
+</dataset>
+```
 
 ## Scripting
 
