@@ -4,7 +4,7 @@
 
 	<groupId>org.lsc.plugins.connectors</groupId>
 	<artifactId>fusiondirectory</artifactId>
-	<version>1.0.0</version>
+	<version>1.0</version>
 	<name>LSC fusiondirectory Synchronization Connector</name>
 	<url></url>
 
