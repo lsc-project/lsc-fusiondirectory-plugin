@@ -43,6 +43,9 @@
 package org.lsc.plugins.connectors.fusiondirectory;
 
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -56,6 +59,7 @@ import org.lsc.LscModifications;
 import org.lsc.beans.IBean;
 import org.lsc.configuration.PluginConnectionType;
 import org.lsc.configuration.TaskType;
+import org.lsc.configuration.ConnectionType;
 import org.lsc.exception.LscServiceCommunicationException;
 import org.lsc.exception.LscServiceConfigurationException;
 import org.lsc.exception.LscServiceException;
@@ -174,4 +178,8 @@ public class FusionDirectoryDstService implements IWritableService {
 		return dao.getAttributes().getString();
 	}
 
+	public Collection<Class<? extends ConnectionType>> getSupportedConnectionType() {
+		Collection<Class<? extends ConnectionType>> list = new ArrayList<Class<? extends ConnectionType>>();
+		return list;
+	}
 }
