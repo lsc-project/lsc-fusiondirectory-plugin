@@ -10,6 +10,13 @@ This plugin uses [FusionDirectory REST API](https://rest-api.fusiondirectory.org
 
 ## Configuration
 
+### XML namespace
+
+You need to add the plugin namespace to the main lsc.xml file, for example:
+```xml
+<lsc xmlns="http://lsc-project.org/XSD/lsc-core-2.2.xsd" xmlns:fusiondirectory="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.0.xsd" revision="0">
+```
+
 ### PluginConnection
 
 + `name`: the name of the connection
@@ -19,7 +26,7 @@ This plugin uses [FusionDirectory REST API](https://rest-api.fusiondirectory.org
 
 Example: 
 
-```
+```xml
 <pluginConnection>
         <name>fusiondirectory</name>
         <url>http://fusiondirectory.local/fusiondirectory/rest.php/v1</url>
@@ -40,7 +47,7 @@ Example:
 
 Example of source service :
 
-```
+```xml
 <pluginSourceService implementationClass="org.lsc.plugins.connectors.fusiondirectory.FusionDirectorySrcService">
     <name>fusiondirectory-source-service</name>
     <connection reference="fusiondirectory" />
@@ -69,7 +76,7 @@ Example of source service :
 
 Example of a destination service :
 
-```
+```xml
 <pluginDestinationService implementationClass="org.lsc.plugins.connectors.fusiondirectory.FusionDirectoryDstService">
     <name>fusiondirectory-dest-service</name>
     <connection reference="fusiondirectory" />
@@ -98,13 +105,13 @@ Example of a destination service :
 
 Multiple attributes in Fusiondirectory must be declared as so:
 
-```
+```xml
 <fusiondirectory:attribute multiple="true">title</fusiondirectory:attribute>
 ```
 
 Attribute user/userPassword may define a passwordHash with a value chosen from Fusiondirectory > Configuration > Password settings > allowed password hashes:
 
-```
+```xml
 <fusiondirectory:attribute passwordHash="clear">userPassword</fusiondirectory:attribute>
 ```
 
@@ -130,13 +137,13 @@ If no filters are defined, the connector will retrieve all entries of type _enti
 
 When using the destination service, the `mainIdentifier` holds the value of your pivot attribute:
 
-```
+```xml
 <mainIdentifier><![CDATA[ srcBean.getDatasetFirstValueById("uid") ]]></mainIdentifier>
 ```
 
 The `base` attribute holds the location where the entity will be created or moved to:
 
-```
+```xml
 <dataset>
     <name>base</name>
     <policy>FORCE</policy>
@@ -152,7 +159,7 @@ The `base` attribute holds the location where the entity will be created or move
 
 First, declare it as a customLibrary:
 
-```
+```xml
 <task>
 ...
 	<customLibrary>
@@ -163,7 +170,7 @@ First, declare it as a customLibrary:
 
 Then, an instance of the class can be accessed in scripts using `custom[0]`:
 
-```
+```xml
 <dataset>
   <name>member</name>
   <forceValues>
@@ -185,7 +192,7 @@ This library has available methods:
 
 Here is a script example of resolving group members DN from AD to FusionDirectory:
 
-```
+```xml
 <dataset>
   <name>member</name>
   <forceValues>
