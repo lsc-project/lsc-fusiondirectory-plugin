@@ -5,7 +5,7 @@
 	<groupId>org.lsc.plugins.connectors</groupId>
 	<artifactId>fusiondirectory</artifactId>
 	<version>1.1</version>
-	<name>LSC fusiondirectory Synchronization Connector</name>
+	<name>LSC Fusion Directory Connector</name>
 	<url></url>
 
 	<properties>
@@ -23,7 +23,7 @@
 		<dependency>
 			<groupId>org.lsc</groupId>
 			<artifactId>lsc-core</artifactId>
-			<version>2.2.0</version>
+			<version>2.2</version>
 			<type>jar</type>
 			<optional>false</optional>
 			<exclusions>
