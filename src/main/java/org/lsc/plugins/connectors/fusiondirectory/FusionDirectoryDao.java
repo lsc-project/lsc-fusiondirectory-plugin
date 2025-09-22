@@ -47,10 +47,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -64,16 +62,13 @@ import javax.ws.rs.core.Response;
 
 import org.glassfish.jersey.client.HttpUrlConnectorProvider;
 import org.glassfish.jersey.jackson.JacksonFeature;
-import org.lsc.LscDatasets;
-import org.lsc.configuration.PluginConnectionType;
-import org.lsc.configuration.ValuesType;
 import org.lsc.exception.LscServiceException;
 import org.lsc.plugins.connectors.fusiondirectory.beans.Login;
 import org.lsc.plugins.connectors.fusiondirectory.beans.Tab;
+import org.lsc.plugins.connectors.fusiondirectory.beans.Token;
 import org.lsc.plugins.connectors.fusiondirectory.generated.Attribute;
 import org.lsc.plugins.connectors.fusiondirectory.generated.Attributes;
 import org.lsc.plugins.connectors.fusiondirectory.generated.AttributesTab;
-import org.lsc.plugins.connectors.fusiondirectory.generated.ServiceSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,61 +80,54 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 public class FusionDirectoryDao {
 
-	public static final String UID = "uid";
-	public static final String DN = "dn";
-	public static final String DEFAULT = "default";
-	public static final Pattern PATTERN_ATTR_OPT = Pattern.compile("^(\\w+);(.*)$");
+	private static final String UID = "uid";
+	private static final String DN = "dn";
+	private static final String DEFAULT = "default";
 	private static final String SESSION_TOKEN = "Session-Token";
 	private static final String OBJECTS = "objects";
 	private static final Logger LOGGER = LoggerFactory.getLogger(FusionDirectoryDao.class);
+	public static final Pattern PATTERN_ATTR_OPT = Pattern.compile("^(\\w+);(.*)$");
 
-	private final String entity;
 	private final String username;
 	private final String password;
-	private final Optional<String> pivot;
-	private final Optional<String> directory;
-	private final Optional<String> base;
-	private final Optional<String> filter;
-	private final Optional<String> allFilter;
-	private final Optional<String> oneFilter;
-	private final Optional<String> cleanFilter;
-	private final Optional<String> template;
-	private final Attributes attributesSettings;
+	private final int sessionLifetime;
+	private final String directory;
 
 	private WebTarget target;
 	private ObjectMapper mapper;
 
 	// Keep one token / thread worker
-	private Map<String, String> tokenCache;
+	private Map<String, Token> tokenCache;
 
-	public FusionDirectoryDao(PluginConnectionType connection, ServiceSettings settings) throws LscServiceException {
+	public FusionDirectoryDao(String url, String username, String password, int sessionLifetime,
+			Optional<String> directory) {
 		mapper = new ObjectMapper();
-		this.entity = settings.getEntity();
-		this.username = connection.getUsername();
-		this.password = connection.getPassword();
-		this.pivot = getStringParameter(settings.getPivot());
-		this.base = getStringParameter(settings.getBase());
-		this.filter = getStringParameter(settings.getFilter());
-		this.allFilter = getStringParameter(settings.getAllFilter());
-		this.oneFilter = getStringParameter(settings.getOneFilter());
-		this.cleanFilter = getStringParameter(settings.getCleanFilter());
-		this.directory = getStringParameter(settings.getDirectory());
-		this.template = getStringParameter(settings.getTemplate());
-		this.attributesSettings = settings.getAttributes();
-
+		this.username = username;
+		this.password = password;
+		this.sessionLifetime = sessionLifetime;
+		this.directory = getDirectory(directory);
 		Client client = ClientBuilder.newClient().register(new JacksonFeature());
-		target = client.target(connection.getUrl());
+		target = client.target(url);
 
 		tokenCache = new HashMap<>();
 	}
 
-	private void login() throws LscServiceException {
+	private String getDirectory(Optional<String> directory) {
+		return directory.orElse(DEFAULT);
+	}
+	
+	public String getPivotName(Optional<String> pivot) {
+		return pivot.orElse(UID);
+	}
+
+
+	public Token startSession() throws LscServiceException {
 		Response response = null;
 		try {
 			Login login = new Login();
 			login.setUser(username);
 			login.setPassword(password);
-			login.setDirectory(getDirectory());
+			login.setDirectory(directory);
 			WebTarget currentTarget = target.path("login");
 			LOGGER.info(String.format("Login to FusionDirectory %s as %s for thread %s", currentTarget.getUri().toString(), username, Thread.currentThread().getId()));
 			response = currentTarget.request().post(Entity.entity(login, MediaType.APPLICATION_JSON));
@@ -148,47 +136,22 @@ public class FusionDirectoryDao {
 				LOGGER.error(errorMessage);
 				throw new LscServiceException(errorMessage);
 			}
-			String token = response.readEntity(String.class).replaceAll("\n", "").replaceAll("\"", "");
-			synchronized (tokenCache) {
-				tokenCache.put(String.valueOf(Thread.currentThread().getId()), token);
-				LOGGER.debug(String.format("Register token %s for thread %s", token, Thread.currentThread().getId()));
-			}
+			return new Token(response.readEntity(String.class).replaceAll("\n", "").replaceAll("\"", ""));
 		} finally {
 			if (response != null) {
 				response.close();
 			}
 		}
 	}
-
-	private String getToken() {
-		synchronized (tokenCache) {
-			return tokenCache.get(String.valueOf(Thread.currentThread().getId()));
-		}
-	}
-
-	/**
-	 * Check if session is still valid, and open a new session if necessary.
-	 * @throws LscServiceException
-	 */
-	private void ping() throws LscServiceException {
+	private void closeSession(Token token) {
 		Response response = null;
-
-		String token = getToken();
-		if (token == null) {
-			login();
-			return;
-		}
-
 		try {
-			WebTarget currentTarget = target.path("token");
-			response = currentTarget.request().header(SESSION_TOKEN, token).get();
-			if (Response.Status.fromStatusCode(response.getStatus()) == Response.Status.UNAUTHORIZED) {
-				LOGGER.info("FusionDirectory session has expired. Reconnecting ...");
-				login();
-			} else if (!checkResponse(response)) {
-				String errorMessage = String.format("Cannot ping Fusiondirectory, message: %s", response.readEntity(String.class));
-				LOGGER.error(errorMessage);
-				throw new LscServiceException(errorMessage);
+			WebTarget currentTarget = target.path("logout");
+			LOGGER.info(String.format("Logout from FusionDirectory %s as %s for thread %s", currentTarget.getUri().toString(), username, Thread.currentThread().getId()));
+			response = currentTarget.request().header(SESSION_TOKEN, token.getSessionId()).post(Entity.json(null));
+			if (!checkResponse(response)) {
+				String warnMessage = String.format("Cannot logout from Fusiondirectory, message: %s", response.readEntity(String.class));
+				LOGGER.warn(warnMessage);
 			}
 		} finally {
 			if (response != null) {
@@ -196,29 +159,119 @@ public class FusionDirectoryDao {
 			}
 		}
 	}
-
-	private Optional<String> getStringParameter(String parameter) {
-		return Optional.ofNullable(parameter).filter(f -> !f.trim().isEmpty());
+	private Token getToken(boolean resetSession) throws LscServiceException {
+		if (resetSession == true) {
+			LOGGER.info(String.format("Reset FusionDirectory session as %s for thread %s", username, Thread.currentThread().getId()));
+		}
+		synchronized (tokenCache) {
+			Token token = tokenCache.get(String.valueOf(Thread.currentThread().getId()));
+			if (token != null && token.hasExpired(this.sessionLifetime)) {
+				LOGGER.info(String.format("Expire FusionDirectory session for thread %s after %s seconds.", Thread.currentThread().getId(), this.sessionLifetime));
+				closeSession(token);
+				resetSession = true;
+			}
+			if (token == null || resetSession) {
+				token = startSession();
+				tokenCache.put(String.valueOf(Thread.currentThread().getId()), token);
+			}
+			return token;
+		}
 	}
 
-	public Map<String, LscDatasets> getList() throws LscServiceException {
-		return getList(allFilter.isPresent() ? allFilter : filter);
+	public Response httpGet(WebTarget webTarget) throws LscServiceException {
+		return httpGet(webTarget, false);
+	}
+	private Response httpGet(WebTarget webTarget, boolean resetSession) throws LscServiceException {
+		Response response = webTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, getToken(resetSession).getSessionId()).get(Response.class);
+		if (!resetSession && Response.Status.fromStatusCode(response.getStatus()) == Response.Status.UNAUTHORIZED) {
+			// Try again once to restart session.
+			return httpGet(webTarget, true);
+		}
+		if (!checkResponse(response)) {
+			String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
+					response.readEntity(String.class));
+			LOGGER.error(errorMessage);
+			throw new LscServiceException(errorMessage);
+		}
+		return response;
 	}
 
-	public String getDirectory() {
-		return directory.map(p -> p).orElse(DEFAULT);
+	public Response httpPost(WebTarget webTarget, Entity<?> entity) throws LscServiceException {
+		return httpPost(webTarget, entity, false);
+	}
+	private Response httpPost(WebTarget webTarget, Entity<?> entity, boolean resetSession) throws LscServiceException {
+		Response response = webTarget.request().header(SESSION_TOKEN, getToken(resetSession).getSessionId()).post(entity);
+		if (!resetSession && Response.Status.fromStatusCode(response.getStatus()) == Response.Status.UNAUTHORIZED) {
+			// Try again once to restart session.
+			return httpPost(webTarget, entity, true);
+		}
+		if (!checkResponse(response)) {
+			String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
+					response.readEntity(String.class));
+			LOGGER.error(errorMessage);
+			throw new LscServiceException(errorMessage);
+		}
+		return response;
 	}
 
-	public String getPivotName() {
-		return pivot.map(p -> p).orElse(UID);
+	public Response httpPatch(WebTarget webTarget, Entity<?> entity) throws LscServiceException {
+		return httpPatch(webTarget, entity, false);
+	}
+	private Response httpPatch(WebTarget webTarget, Entity<?> entity, boolean resetSession) throws LscServiceException {
+		Response response = webTarget.request().header(SESSION_TOKEN, getToken(resetSession).getSessionId()).method("PATCH", entity);
+		if (!resetSession && Response.Status.fromStatusCode(response.getStatus()) == Response.Status.UNAUTHORIZED) {
+			// Try again once to restart session.
+			return httpPatch(webTarget, entity, true);
+		}
+		if (!checkResponse(response)) {
+			String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
+					response.readEntity(String.class));
+			LOGGER.error(errorMessage);
+			throw new LscServiceException(errorMessage);
+		}
+		return response;
 	}
 
-	public Map<String, LscDatasets> getList(Optional<String> computedFilter) throws LscServiceException {
+	public Response httpPut(WebTarget webTarget, Entity<?> entity) throws LscServiceException {
+		return httpPut(webTarget, entity, false);
+	}
 
-		// Keeps session opened
-		ping();
+	private Response httpPut(WebTarget webTarget, Entity<?> entity, boolean resetSession) throws LscServiceException {
+		Response response = webTarget.request().header(SESSION_TOKEN, getToken(resetSession).getSessionId())
+				.put(entity);
+		if (!resetSession && Response.Status.fromStatusCode(response.getStatus()) == Response.Status.UNAUTHORIZED) {
+			// Try again once to restart session.
+			return httpPut(webTarget, entity, true);
+		}
+		if (!checkResponse(response)) {
+			String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
+					response.readEntity(String.class));
+			LOGGER.error(errorMessage);
+			throw new LscServiceException(errorMessage);
+		}
+		return response;
+	}
 
-		Map<String, LscDatasets> resources = new LinkedHashMap<>();
+	public Response httpDelete(WebTarget webTarget) throws LscServiceException {
+		return httpDelete(webTarget, false);
+	}
+	private Response httpDelete(WebTarget webTarget, boolean resetSession) throws LscServiceException {
+		Response response = webTarget.request().header(SESSION_TOKEN, getToken(resetSession).getSessionId()).delete();
+		if (!resetSession && Response.Status.fromStatusCode(response.getStatus()) == Response.Status.UNAUTHORIZED) {
+			// Try again once to restart session.
+			return httpDelete(webTarget, true);
+		}
+		if (!checkResponse(response)) {
+			String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
+					response.readEntity(String.class));
+			LOGGER.error(errorMessage);
+			throw new LscServiceException(errorMessage);
+		}
+		return response;
+	}
+
+	public ObjectNode getList(String entity, Optional<String> base, Optional<String> pivot,
+			Optional<String> computedFilter) throws LscServiceException {
 		Response response = null;
 		try {
 			WebTarget currentTarget = target.path(OBJECTS).path(entity);
@@ -228,31 +281,14 @@ public class FusionDirectoryDao {
 			if (computedFilter.isPresent()) {
 				currentTarget = currentTarget.queryParam("filter", computedFilter.get());
 			}
-			String pivotName = getPivotName();
-			currentTarget = currentTarget.queryParam("attrs["+pivotName+"]", "*");
+			if (pivot.isPresent()) {
+				currentTarget = currentTarget.queryParam("attrs[" + getPivotName(pivot) + "]", "*");
+			}
+			LOGGER.debug(String.format("Search %s from: %s with filter %s ", entity, currentTarget.getUri().toString(), computedFilter));
+			response = httpGet(currentTarget);
+			
+			return (ObjectNode) mapper.readTree(response.readEntity(String.class));
 
-			LOGGER.debug(String.format("Search %s from: %s ", entity, currentTarget.getUri().toString()));
-			response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, getToken()).get(Response.class);
-			if (!checkResponse(response)) {
-				String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
-						response.readEntity(String.class));
-				LOGGER.error(errorMessage);
-				throw new LscServiceException(errorMessage);
-			}
-			ObjectNode root = (ObjectNode)  mapper.readTree(response.readEntity(String.class));
-			Iterator<Map.Entry<String, JsonNode>> iter = root.fields();
-			while (iter.hasNext()) {
-				Map.Entry<String, JsonNode> entry = iter.next();
-				Iterator<Map.Entry<String, JsonNode>> iter2 = entry.getValue().fields();
-				while (iter2.hasNext()) {
-					Map.Entry<String, JsonNode> entry2 = iter2.next();
-					String pivotValue =  ((ArrayNode)entry2.getValue()).get(0).textValue();
-					LscDatasets datasets = new LscDatasets();
-					datasets.put(DN, entry.getKey());
-					datasets.put(entry2.getKey(), pivotValue);
-					resources.put(pivotValue, datasets);
-				}
-			}
 		} catch (JsonProcessingException e) {
 			throw new LscServiceException(e);
 		} finally {
@@ -260,7 +296,6 @@ public class FusionDirectoryDao {
 				response.close();
 			}
 		}
-		return resources;
 	}
 
 	private static boolean checkResponse(Response response) {
@@ -268,18 +303,17 @@ public class FusionDirectoryDao {
 	}
 
 	@SuppressWarnings("unchecked")
-	public Map<String, Object> getDetails(String dn) throws LscServiceException {
-
-		// Keeps session opened
-		ping();
+	public Map<String, Object> getDetails(String dn, String entity, Attributes attributesSettings)
+			throws LscServiceException {
 
 		Response response = null;
 		try {
+
 			Map<String, Object> results = new HashMap<>();
 			results.put(DN, dn);
 
 			// Check for inactive tabs before requesting them (if an inactive tab is requested, a 400 error is sent)
-			List<Tab> tabs = getEntityTabs(dn);
+			List<Tab> tabs = getEntityTabs(dn, entity);
 
 			for (AttributesTab attributesTab: attributesSettings.getTab()) {
 				Optional<Tab> tab = tabs.stream().filter(p -> p.getClass_().equals(attributesTab.getName())).findFirst();
@@ -290,13 +324,7 @@ public class FusionDirectoryDao {
 				}
 				if (tab.get().getActive()) {
 					WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(attributesTab.getName());
-					response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, getToken()).get(Response.class);
-
-					if (!checkResponse(response)) {
-						String errorMessage = String.format("status: %d, message: %s", response.getStatus(), response.readEntity(String.class));
-						LOGGER.error(errorMessage);
-						throw new LscServiceException(errorMessage);
-					}
+					response = httpGet(currentTarget);
 					Map<String, Object> raw = mapper.readValue(response.readEntity(String.class), Map.class);
 					for (Attribute attribute : attributesTab.getAttribute()) {
 						if (isOptionAttribute(attribute.getValue())) {
@@ -337,60 +365,50 @@ public class FusionDirectoryDao {
 		}
 	}
 
-	public Optional<Entry<String, LscDatasets>> findFirstByPivots(LscDatasets pivots, boolean clean) throws LscServiceException {
-		Optional<String> computedFilter = clean ? cleanFilter : oneFilter;
-		if (computedFilter.isPresent()) {
-			for (String somePivot : pivots.getAttributesNames()) {
-				computedFilter =  Optional.of(Pattern.compile("\\{" + somePivot + "\\}", Pattern.CASE_INSENSITIVE)
-					.matcher(computedFilter.get()).replaceAll(Matcher.quoteReplacement(pivots.getValueForFilter(somePivot.toLowerCase()))));
-			}
-		} else {
-			StringBuilder pivotFilter = new StringBuilder("(|");
-			for (String somePivot : pivots.getAttributesNames()) {
-				pivotFilter.append("(").append(getPivotName()).append("=").append(pivots.getValueForFilter(somePivot.toLowerCase())).append(")");
-			}
-			pivotFilter.append(")");
-			computedFilter = Optional.of(filter.map(f -> "(&" + f  + pivotFilter.toString() + ")").orElse(pivotFilter.toString()));
-		}
-		return getList(computedFilter).entrySet().stream().findFirst();
-	}
-	
-	public Optional<Entry<String, LscDatasets>> findFirstByPivot(String pivotValue) throws LscServiceException {
-		StringBuilder pivotFilter = new StringBuilder();
-		pivotFilter.append("(").append(getPivotName()).append("=").append(pivotValue).append(")");
-		return getList(Optional.of(pivotFilter.toString())).entrySet().stream().findFirst();
+	public static boolean isOptionAttribute(String attribute) {
+		return PATTERN_ATTR_OPT.matcher(attribute).matches();
 	}
 
-	public ValuesType getAttributes() {
-		ValuesType flatAttributes = new ValuesType();
-		for (AttributesTab attributesTab: attributesSettings.getTab()) {
-			for (Attribute attribute : attributesTab.getAttribute()) {
-				flatAttributes.getString().add(attribute.getValue());
+	public static String stripOptionFromAttributeName(String attribute) {
+		Matcher mopt = PATTERN_ATTR_OPT.matcher(attribute);
+		if (mopt.matches()) {
+			return mopt.group(1);
+		}
+		return attribute;
+	}
+
+	@SuppressWarnings("unchecked")
+	private List<String> filterAndStripOptionFromValues(String attribute, Object rawValues) {
+		Matcher mopt = PATTERN_ATTR_OPT.matcher(attribute);
+		List<String> values = new ArrayList<String>();
+		if (mopt.matches()) {
+			String option = mopt.group(2);
+			if (rawValues instanceof String
+					&& ((String) rawValues).toLowerCase().startsWith(option.toLowerCase() + ";")) {
+				values.add(((String) rawValues).replaceAll("(?i)" + option + ";", ""));
+			} else if (rawValues instanceof List<?>) {
+				for (Object rawValue : (List<Object>) rawValues) {
+					if (((String) rawValue).toLowerCase().startsWith(option.toLowerCase() + ";")) {
+						values.add(((String) rawValue).replaceAll("(?i)" + option + ";", ""));
+					}
+				}
 			}
 		}
-		return flatAttributes;
+		return values;
 	}
 
-	public boolean create(Map<String, List<Object>> modificationsItemsByHash) throws LscServiceException {
-
-		// Keeps session opened
-		ping();
+	public boolean create(String entity, Map<String, Map<String, Object>> attributes, Optional<String> template)
+			throws LscServiceException {
 
 		Map<String, Object> payload = new HashMap<String, Object>();
-		payload.put("attrs", prepareAttributes(modificationsItemsByHash));
+		payload.put("attrs", attributes);
 		if (template.isPresent()) {
 			payload.put("template", template.get());
 		}
 		WebTarget currentTarget = target.path(OBJECTS).path(entity);
 		Response response = null;
 		try {
-			response = currentTarget.request().header(SESSION_TOKEN, getToken()).post(Entity.entity(payload, MediaType.APPLICATION_JSON));
-			if (!checkResponse(response)) {
-				String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
-						response.readEntity(String.class));
-				LOGGER.error(errorMessage);
-				throw new LscServiceException(errorMessage);
-			}
+			response = httpPost(currentTarget, Entity.entity(payload, MediaType.APPLICATION_JSON));
 		} finally {
 			if (response != null) {
 				response.close();
@@ -400,49 +418,28 @@ public class FusionDirectoryDao {
 		return true;
 	}
 
-	public boolean modify(String mainIdentifier, Map<String, List<Object>> modificationsItemsByHash) throws LscServiceException {
+	public boolean modify(String entity, String dn, Map<String, Map<String, Object>> updateAttributes,
+			List<String> deleteAttributes)
+			throws LscServiceException {
 
-		// Keeps session opened
-		ping();
-
-		// retrieve DN
-		Optional<Entry<String, LscDatasets>> entry = findFirstByPivot(mainIdentifier);
-
-		if (entry.isPresent()) {
-			String dn = entry.get().getValue().getStringValueAttribute(FusionDirectoryDao.DN);
-
-			Map<String, Map<String, Object>> attributes = prepareAttributes(modificationsItemsByHash);
-
-			if (attributes.size() > 0) {
+		if (updateAttributes.size() > 0) {
 				WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn);
 				currentTarget.property(HttpUrlConnectorProvider.SET_METHOD_WORKAROUND, true);
 				Response response = null;
 				try {
-					response = currentTarget.request().header(SESSION_TOKEN, getToken()).method("PATCH", Entity.entity(attributes, MediaType.APPLICATION_JSON));
-					if (!checkResponse(response)) {
-						String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
-								response.readEntity(String.class));
-						LOGGER.error(errorMessage);
-						throw new LscServiceException(errorMessage);
-					}
+					response = httpPatch(currentTarget, Entity.entity(updateAttributes, MediaType.APPLICATION_JSON));
 				} finally {
 					if (response != null) {
 						response.close();
 					}
 				}
 			}
-			List<String> toDelete = prepareAttributesToDelete(modificationsItemsByHash);
-			for (String deleteAttr: toDelete) {
+			// List<String> toDelete = prepareAttributesToDelete(modificationsItemsByHash);
+			for (String deleteAttr : deleteAttributes) {
 				Response response = null;
 				try {
 					WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(deleteAttr);
-					response = currentTarget.request().header(SESSION_TOKEN, getToken()).delete();
-					if (!checkResponse(response)) {
-						String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
-								response.readEntity(String.class));
-						LOGGER.error(errorMessage);
-						throw new LscServiceException(errorMessage);
-					}
+					response = httpDelete(currentTarget);
 				} finally {
 					if (response != null) {
 						response.close();
@@ -450,51 +447,28 @@ public class FusionDirectoryDao {
 				}
 			}
 			return true;
-		} else {
-			throw new LscServiceException(String.format("Cannot find entity %s", mainIdentifier));
-		}
+
 	}
 
-	public boolean delete(String mainIdentifier) throws LscServiceException {
-
-		// Keeps session opened
-		ping();
-
-		Optional<Entry<String, LscDatasets>> entry = findFirstByPivot(mainIdentifier);
-		if (entry.isPresent()) {
-			String dn = entry.get().getValue().getStringValueAttribute(FusionDirectoryDao.DN);
-			LOGGER.debug(String.format("Deleting %s with dn=%s", entity, dn));
-			WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn);
-			Response response = null;
-			try {
-				response = currentTarget.request().header(SESSION_TOKEN, getToken()).delete();
-				if (!checkResponse(response)) {
-					String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
-							response.readEntity(String.class));
-					LOGGER.error(errorMessage);
-					throw new LscServiceException(errorMessage);
-				}
-			} finally {
-				if (response != null) {
-					response.close();
-				}
+	public boolean delete(String entity, String dn) throws LscServiceException {
+		LOGGER.debug(String.format("Deleting %s with dn=%s", entity, dn));
+		WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn);
+		Response response = null;
+		try {
+			response = httpDelete(currentTarget);
+		} finally {
+			if (response != null) {
+				response.close();
 			}
-			return true;
-		} else {
-			throw new LscServiceException(String.format("Cannot find entity %s", mainIdentifier));
 		}
+		return true;
 	}
-	private List<Tab> getEntityTabs(String dn) throws LscServiceException {
+
+	private List<Tab> getEntityTabs(String dn, String entity) throws LscServiceException {
 		Response response = null;
 		try {
 			WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn);
-			response = currentTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, getToken()).get(Response.class);
-			if (!checkResponse(response)) {
-				String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
-						response.readEntity(String.class));
-				LOGGER.error(errorMessage);
-				throw new LscServiceException(errorMessage);
-			}
+			response = httpGet(currentTarget);
 			return Arrays.asList(mapper.readValue(response.readEntity(String.class), Tab[].class));
 		} catch (JsonProcessingException e) {
 			throw new LscServiceException(e);
@@ -505,142 +479,50 @@ public class FusionDirectoryDao {
 		}
 	}
 
-	private List<String> prepareAttributesToDelete(Map<String, List<Object>>  modificationsItemsByHash) throws LscServiceException {
-		List<String> toDelete = new ArrayList<>();
-		for (String attribute: modificationsItemsByHash.keySet()) {
-			TabAttribute tabAttribute = getTabAttribute(attribute);
-			if (modificationsItemsByHash.get(attribute) instanceof ArrayList<?>) {
-				if (((ArrayList<?>) modificationsItemsByHash.get(attribute)).isEmpty() 
-						&& !tabAttribute.getAttribute().isMultiple()
-						&& !tabAttribute.isOption()) {
-					toDelete.add(tabAttribute.getTab() + "/" + tabAttribute.getAttribute().getValue());
+	public List<String> getAttribute(String entity, String dn, String attribute) throws LscServiceException {
+		List<String> results = new ArrayList<>();
+		ObjectMapper mapper = new ObjectMapper();
+		Response response = null;
+		try {
+			WebTarget currentTarget = target.path(OBJECTS).path(entity);
+			currentTarget = currentTarget.queryParam("base", dn);
+			currentTarget = currentTarget.queryParam("attrs[" + attribute + "]", "*");
+
+			response = httpGet(currentTarget);
+
+			ObjectNode root = (ObjectNode) mapper.readTree(response.readEntity(String.class));
+			Iterator<Map.Entry<String, JsonNode>> iter = root.fields();
+			while (iter.hasNext()) {
+				Map.Entry<String, JsonNode> entry = iter.next();
+				Iterator<Map.Entry<String, JsonNode>> iter2 = entry.getValue().fields();
+				while (iter2.hasNext()) {
+					Map.Entry<String, JsonNode> entry2 = iter2.next();
+					ArrayNode attributes = ((ArrayNode) entry2.getValue());
+					attributes.forEach(jsonNode -> results.add(jsonNode.asText()));
 				}
-			} else {
-				throw new LscServiceException(String.format("%s is not a supported type for attribute %s",modificationsItemsByHash.get(attribute).getClass().toString(), attribute));
+				break;
+			}
+		} catch (JsonProcessingException e) {
+			throw new LscServiceException(e);
+		} finally {
+			if (response != null) {
+				response.close();
 			}
 		}
-		return toDelete;
+		return results;
 	}
 
-	private Map<String, Map<String, Object>> prepareAttributes(Map<String, List<Object>>  modificationsItemsByHash) throws LscServiceException {
-		Map<String, Map<String, Object>> attrs =  new HashMap<String, Map<String, Object>>();
-		for (String attribute: modificationsItemsByHash.keySet()) {
-			TabAttribute tabAttribute = getTabAttribute(attribute);
-			if (modificationsItemsByHash.get(attribute) instanceof ArrayList<?>) {
-				ArrayList<?> list = (ArrayList<?>) modificationsItemsByHash.get(attribute);
-				if (!list.isEmpty() || tabAttribute.getAttribute().isMultiple() || tabAttribute.isOption()) {
-					if (attrs.get(tabAttribute.getTab()) == null) {
-						attrs.put(tabAttribute.getTab(), new HashMap<String, Object>());
-					}
-					if (tabAttribute.isOption()) {
-						String attributeShortName=tabAttribute.stripOptionFromAttributeName();
-						attrs.get(tabAttribute.getTab()).put(attributeShortName,
-								tabAttribute.getOptionValues(attrs.get(tabAttribute.getTab()).get(attributeShortName), list));
-					}
-					else if (tabAttribute.getAttribute().isMultiple()) {
-						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list);
-					}
-					else if (tabAttribute.getAttribute().getPasswordHash() != null) {
-						// specific use case for userPassword attribute: need to be sent as an array with hash to be set, otherwise new password is ignored by Fusiondirectory if it was not set
-						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(),
-								getPasswordArray(list.get(0), tabAttribute.getAttribute().getPasswordHash()));
-					}
-					else {
-						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list.get(0));
-					}
-				}
-			} else {
-				throw new LscServiceException(String.format("%s is not a supported type for attribute %s",modificationsItemsByHash.get(attribute).getClass().toString(), attribute));
+	public void setAttribute(String entity, String dn, String tab, String attribute, List<String> values, boolean isMultiple) throws LscServiceException {
+		Object payload = isMultiple ? values : "\"" + values.get(0) + "\"";
+		WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(tab).path(attribute);
+		Response response = null;
+		try {
+			response = httpPut(currentTarget, Entity.entity(payload, MediaType.APPLICATION_JSON));
+		} finally {
+			if (response != null) {
+				response.close();
 			}
 		}
-		return attrs;
 	}
-	private String[] getPasswordArray(Object somePassword, String passwordHash) {
-		String userPassword = somePassword instanceof String ? (String)somePassword :
-			somePassword instanceof byte[] ? new String((byte[])somePassword) : somePassword.toString();
-		String[] passwordArr = { passwordHash, userPassword, userPassword, "", "" };
-		return passwordArr;
-	}
-	public static boolean isOptionAttribute(String attribute) {
-		return PATTERN_ATTR_OPT.matcher(attribute).matches();
-	}
-	public static String stripOptionFromAttributeName(String attribute) {
-		Matcher mopt = PATTERN_ATTR_OPT.matcher(attribute);
-		if (mopt.matches()) {
-			return mopt.group(1);
-		}
-		return attribute;
-	}
-	@SuppressWarnings("unchecked")
-	private List<String> filterAndStripOptionFromValues(String attribute, Object rawValues) {
-		Matcher mopt = PATTERN_ATTR_OPT.matcher(attribute);
-		List<String> values = new ArrayList<String>();
-		if (mopt.matches()) {
-			String option = mopt.group(2);
-			if (rawValues instanceof String && ((String) rawValues).toLowerCase().startsWith(option.toLowerCase() + ";")) {
-				values.add(((String) rawValues).replaceAll("(?i)" + option + ";", ""));
-			} else if (rawValues instanceof List<?>) {
-				for (Object rawValue: (List<Object>)rawValues) {
-					if (((String) rawValue).toLowerCase().startsWith(option.toLowerCase() + ";")) {
-						values.add(((String) rawValue).replaceAll("(?i)" + option + ";", ""));
-					}
-				}
-			}
-		}
-		return values;
-	}
-	private TabAttribute getTabAttribute(String attribute) throws LscServiceException {
-		TabAttribute tabAttribute = null;
 
-		for (AttributesTab attributesTab: attributesSettings.getTab()) {
-			for (Attribute someAttribute : attributesTab.getAttribute()) {
-				if (someAttribute.getValue().equalsIgnoreCase(attribute)) {
-					tabAttribute = new TabAttribute(attributesTab.getName(), someAttribute);
-				}
-			}
-		}
-		if (tabAttribute == null) {
-			throw new LscServiceException(String.format("Cannot find tab for attribute %s", attribute));
-		}
-		return tabAttribute;
-	}
-	private class TabAttribute {
-		String tab;
-		Attribute attribute;
-		public TabAttribute(String tab, Attribute attribute) {
-			this.tab = tab;
-			this.attribute = attribute;
-		}
-		public String getTab() {
-			return tab;
-		}
-		public Attribute getAttribute() {
-			return attribute;
-		}
-		public boolean isOption() {
-			return FusionDirectoryDao.isOptionAttribute(attribute.getValue());
-		}
-		public String stripOptionFromAttributeName() {
-			return FusionDirectoryDao.stripOptionFromAttributeName(attribute.getValue());
-		}
-		@SuppressWarnings("unchecked")
-		public Object getOptionValues(Object currentValues, ArrayList<?> list) {
-			List<String> newValues = new ArrayList<>();
-			Matcher mopt = PATTERN_ATTR_OPT.matcher(attribute.getValue());
-			if (mopt.matches()) {
-				String option = mopt.group(2);
-				if (currentValues != null) {
-					if (currentValues instanceof String) {
-						newValues.add((String)currentValues);
-					} else if (currentValues instanceof List<?>) {
-						newValues.addAll((List<? extends String>)currentValues);
-					}
-				}
-				for (Object value: list) {
-					newValues.add(option.toLowerCase() + ";" + (String)value);
-				}
-			}
-			return newValues;
-		}
-	}
 }
