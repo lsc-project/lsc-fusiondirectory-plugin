@@ -34,6 +34,7 @@
 			<xsd:complexContent>
 				<xsd:extension base="lsc:serviceType">
 					<xsd:sequence>
+						<xsd:element name="sessionLifetime" type="xsd:int" minOccurs="0" default="-1" />
 						<xsd:element name="entity" type="xsd:string" minOccurs="1" />
 						<xsd:element name="directory" type="xsd:string" minOccurs="0" />
 						<xsd:element name="pivot" type="xsd:string" minOccurs="0" />

@@ -37,6 +37,7 @@ Example:
 
 ### Service settings
 
++ `sessionLifetime`: How many seconds FD session tokens stays alive (OPTIONAL). Default to `-1`; session tokens never expires.
 + `entity`: the type of entity to synchronize (USER, OGROUP ...)
 + `directory`: The LDAP directory to log into,  default is **"default"** (OPTIONAL)
 + `base`: An LDAP base to use (OPTIONAL)
@@ -54,6 +55,7 @@ Example of source service :
     <fusiondirectory:serviceSettings>
         <name>fusiondirectory-service-settings</name>
         <connection reference="fusiondirectory" />
+        <fusiondirectory:sessionLifetime>900</fusiondirectory:sessionLifetime>
         <fusiondirectory:entity>USER</fusiondirectory:entity>
         <fusiondirectory:pivot>uid</fusiondirectory:pivot>
         <fusiondirectory:attributes>
@@ -83,6 +85,7 @@ Example of a destination service :
     <fusiondirectory:serviceSettings>
         <name>fusiondirectory-service-settings</name>
         <connection reference="fusiondirectory" />
+        <fusiondirectory:sessionLifetime>900</fusiondirectory:sessionLifetime>
         <fusiondirectory:entity>USER</fusiondirectory:entity>
         <fusiondirectory:pivot>uid</fusiondirectory:pivot>
         <fusiondirectory:attributes>
@@ -184,9 +187,9 @@ Then, an instance of the class can be accessed in scripts using `custom[0]`:
 
 This library has available methods:
 
-* Log in FusionDirectory if no session has been previously opened: void connect(_endpoint_, _username_, _password_);
+* Log in FusionDirectory if no session has been previously opened: void connect(_endpoint_, _username_, _password_, _directory_, _sessionLifetime_);
 * Search entities DN within base using ldap filter: List<String> search(_entity_, _base_, _filter_);
-* Get attribute values for an entity with this DN: List<String> getAttributeValues(_entity_, _dn_, _attribute_);
+* Get attribute value(s) for an entity with this DN: List<String> getAttribute(_entity_, _dn_, _attribute_);
 * Update entity single attribute value: void setAttribute(_entity_, _dn_, _tab_, _attribute_, _value_);
 * Update entity multiple attribute value: void setAttribute(_entity_, _dn_, _tab_, _attribute_, _values_);
 

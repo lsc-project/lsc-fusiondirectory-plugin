@@ -43,9 +43,6 @@
 package org.lsc.plugins.connectors.fusiondirectory;
 
 import java.util.LinkedHashSet;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -57,58 +54,31 @@ import javax.ws.rs.WebApplicationException;
 import org.lsc.LscDatasets;
 import org.lsc.LscModifications;
 import org.lsc.beans.IBean;
-import org.lsc.configuration.PluginConnectionType;
 import org.lsc.configuration.TaskType;
-import org.lsc.configuration.ConnectionType;
-import org.lsc.exception.LscServiceCommunicationException;
 import org.lsc.exception.LscServiceConfigurationException;
 import org.lsc.exception.LscServiceException;
-import org.lsc.plugins.connectors.fusiondirectory.generated.ServiceSettings;
 import org.lsc.service.IWritableService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class FusionDirectoryDstService implements IWritableService {
+public class FusionDirectoryDstService extends FusionDirectoryAbstractService implements IWritableService {
 
-	protected static final Logger LOGGER = LoggerFactory.getLogger(FusionDirectoryDstService.class);
-	private final FusionDirectoryDao dao;
-	private final Class<IBean> beanClass;
-	
+	private static final Logger LOGGER = LoggerFactory.getLogger(FusionDirectoryDstService.class);
+
 	public FusionDirectoryDstService(final TaskType task) throws LscServiceConfigurationException {
-		try {
-			if (task.getPluginDestinationService().getAny() == null
-					|| task.getPluginDestinationService().getAny().size() != 1 || !((task.getPluginDestinationService()
-							.getAny().get(0) instanceof ServiceSettings))) {
-				throw new LscServiceConfigurationException(
-						"Unable to identify the fusiondirectory service configuration inside the plugin destination node of the task: "
-								+ task.getName());
-			}
-			ServiceSettings settings = (ServiceSettings) task.getPluginDestinationService()
-					.getAny().get(0);
-			PluginConnectionType pluginConnectionType = (PluginConnectionType) task.getPluginDestinationService()
-					.getConnection().getReference();
-			if (pluginConnectionType == null) {
-				throw new LscServiceConfigurationException(
-						"Unable to identify the fusiondirectory connection settings inside the connection node of the task: "
-								+ task.getName());
-			}
-			beanClass = (Class<IBean>) Class.forName(task.getBean());
-			dao = new FusionDirectoryDao(pluginConnectionType, settings);
-		} catch (Exception e) {
-			throw new LscServiceConfigurationException(e);
-		}
+		super(task);
 	}
 
 	@Override
 	public IBean getBean(String pivotValue, LscDatasets lscDatasets, boolean fromSameService) throws LscServiceException {
 		LOGGER.debug(String.format("Call to getBean(%s, %s, %b)", pivotValue, lscDatasets, fromSameService));
-		String pivotName = dao.getPivotName();
+		String pivotName = getPivotName();
 		try {
-			Optional<Entry<String, LscDatasets>> entity = dao.findFirstByPivots(lscDatasets, false);
+			Optional<Entry<String, LscDatasets>> entity = findFirstByPivots(lscDatasets, false);
 			if (entity.isPresent()) {
-				String dn = entity.get().getValue().getStringValueAttribute(FusionDirectoryDao.DN);
+				String dn = entity.get().getValue().getStringValueAttribute(DN);
 				
-				Map<String, Object> details = dao.getDetails(dn);
+				Map<String, Object> details = getDetails(dn);
 				
 				IBean bean = beanClass.newInstance();
 				bean.setMainIdentifier(entity.get().getValue().getStringValueAttribute(pivotName));
@@ -135,17 +105,6 @@ public class FusionDirectoryDstService implements IWritableService {
 	}
 
 	@Override
-	public Map<String, LscDatasets> getListPivots() throws LscServiceException {
-		try {
-			return dao.getList();
-		} catch (Exception e) {
-			LOGGER.error(String.format("Error while getting pivot list (%s)", e));
-			LOGGER.debug(e.toString(), e);
-			throw new LscServiceCommunicationException(e);
-		}
-	}
-
-	@Override
 	public boolean apply(LscModifications lm) throws LscServiceException {
 		try {
 			switch(lm.getOperation()) {
@@ -155,13 +114,13 @@ public class FusionDirectoryDstService implements IWritableService {
 				return true;
 			case CREATE_OBJECT:
 				LOGGER.debug("Creating fusiondirectory object with: " + lm.getModificationsItemsByHash());
-				return dao.create(lm.getModificationsItemsByHash());
+				return create(lm.getModificationsItemsByHash());
 			case UPDATE_OBJECT:
 				LOGGER.debug("Modifying fusiondirectory object: " + lm.getMainIdentifier() + " with: " + lm.getModificationsItemsByHash());
-				return dao.modify(lm.getMainIdentifier(), lm.getModificationsItemsByHash());
+				return modify(lm.getMainIdentifier(), lm.getModificationsItemsByHash());
 			case DELETE_OBJECT:
 				LOGGER.debug("Deleting fusiondirectory object: " + lm.getMainIdentifier());
-				return dao.delete(lm.getMainIdentifier());
+				return delete(lm.getMainIdentifier());
 			default:
 				LOGGER.error(String.format("Unknown operation %s", lm.getOperation()));
 				return false;
@@ -175,11 +134,7 @@ public class FusionDirectoryDstService implements IWritableService {
 
 	@Override
 	public List<String> getWriteDatasetIds() {
-		return dao.getAttributes().getString();
+		return getAttributes().getString();
 	}
 
-	public Collection<Class<? extends ConnectionType>> getSupportedConnectionType() {
-		Collection<Class<? extends ConnectionType>> list = new ArrayList<Class<? extends ConnectionType>>();
-		return list;
-	}
 }

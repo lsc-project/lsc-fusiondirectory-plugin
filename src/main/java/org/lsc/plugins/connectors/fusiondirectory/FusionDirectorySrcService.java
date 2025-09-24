@@ -43,10 +43,6 @@
 package org.lsc.plugins.connectors.fusiondirectory;
 
 import java.util.LinkedHashSet;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
@@ -57,56 +53,19 @@ import javax.ws.rs.WebApplicationException;
 
 import org.lsc.LscDatasets;
 import org.lsc.beans.IBean;
-import org.lsc.configuration.PluginConnectionType;
 import org.lsc.configuration.TaskType;
-import org.lsc.configuration.ConnectionType;
-import org.lsc.exception.LscServiceCommunicationException;
 import org.lsc.exception.LscServiceConfigurationException;
 import org.lsc.exception.LscServiceException;
-import org.lsc.plugins.connectors.fusiondirectory.generated.ServiceSettings;
 import org.lsc.service.IService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class FusionDirectorySrcService implements IService {
+public class FusionDirectorySrcService extends FusionDirectoryAbstractService implements IService {
 
 	protected static final Logger LOGGER = LoggerFactory.getLogger(FusionDirectorySrcService.class);
-	private final Class<IBean> beanClass;
-	private final FusionDirectoryDao dao;
 
 	public FusionDirectorySrcService(final TaskType task) throws LscServiceConfigurationException {
-		try {
-			if (task.getPluginSourceService().getAny() == null || task.getPluginSourceService().getAny().size() != 1
-					|| !(task.getPluginSourceService().getAny().get(0) instanceof ServiceSettings)) {
-				throw new LscServiceConfigurationException(
-						"Unable to identify the fusiondirectory service configuration inside the plugin source node of the task: "
-								+ task.getName());
-			}
-			ServiceSettings settings = (ServiceSettings) task.getPluginSourceService()
-					.getAny().get(0);
-			PluginConnectionType pluginConnectionType = (PluginConnectionType) task.getPluginSourceService()
-					.getConnection().getReference();
-			if (pluginConnectionType == null) {
-				throw new LscServiceConfigurationException(
-						"Unable to identify the fusiondirectory connection settings inside the connection node of the task: "
-								+ task.getName());
-			}
-			beanClass = (Class<IBean>) Class.forName(task.getBean());
-			dao = new FusionDirectoryDao(pluginConnectionType, settings);
-		} catch (Exception e) {
-			throw new LscServiceConfigurationException(e);
-		}
-	}
-
-	@Override
-	public Map<String, LscDatasets> getListPivots() throws LscServiceException {
-		try {
-			return dao.getList();
-		} catch (Exception e) {
-			LOGGER.error(String.format("Error while getting pivot list (%s)", e));
-			LOGGER.debug(e.toString(), e);
-			throw new LscServiceCommunicationException(e);
-		}
+		super(task);
 	}
 
 	@Override
@@ -117,9 +76,9 @@ public class FusionDirectorySrcService implements IService {
 			return null;
 		}
 		if (fromSameService) {
-			return getBeanFromSameService(pivotRawValue, lscDatasets.getStringValueAttribute(FusionDirectoryDao.DN));
+			return getBeanFromSameService(pivotRawValue, lscDatasets.getStringValueAttribute(DN));
 		} else {
-			return getBeanForClean(lscDatasets.getStringValueAttribute(dao.getPivotName()), lscDatasets);
+			return getBeanForClean(lscDatasets.getStringValueAttribute(getPivotName()), lscDatasets);
 		}
 	}
 
@@ -128,7 +87,7 @@ public class FusionDirectorySrcService implements IService {
 			return null;
 		}
 		try {
-			Map<String, Object> entity = dao.getDetails(dn);
+			Map<String, Object> entity = getDetails(dn);
 			IBean bean = beanClass.newInstance();
 			bean.setMainIdentifier(pivotValue);
 			LscDatasets datasets = new LscDatasets();
@@ -151,9 +110,9 @@ public class FusionDirectorySrcService implements IService {
 	}
 
 	private IBean getBeanForClean(String pivotValue, LscDatasets pivots) throws LscServiceException {
-		String pivotName = dao.getPivotName();
+		String pivotName = getPivotName();
 		try {
-			Optional<Entry<String, LscDatasets>> entity = dao.findFirstByPivots(pivots, true);
+			Optional<Entry<String, LscDatasets>> entity = findFirstByPivots(pivots, true);
 			if (entity.isPresent()) {
 				IBean bean = beanClass.newInstance();
 				bean.setMainIdentifier(entity.get().getKey().toString());
@@ -174,10 +133,5 @@ public class FusionDirectorySrcService implements IService {
 			LOGGER.debug(e.toString(), e);
 			throw new LscServiceException(e);
 		}
-	}
-
-	public Collection<Class<? extends ConnectionType>> getSupportedConnectionType() {
-		Collection<Class<? extends ConnectionType>> list = new ArrayList<Class<? extends ConnectionType>>();
-		return list;
 	}
 }
