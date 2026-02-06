@@ -1,5 +1,5 @@
 <?xml version="1.0" ?>
-<lsc xmlns="http://lsc-project.org/XSD/lsc-core-2.1.xsd" xmlns:fusiondirectory="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.0.xsd">
+<lsc xmlns="http://lsc-project.org/XSD/lsc-core-2.2.xsd" xmlns:fusiondirectory="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.0.xsd">
 	<connections>
 		<pluginConnection>
 			<name>fusiondirectory</name>
