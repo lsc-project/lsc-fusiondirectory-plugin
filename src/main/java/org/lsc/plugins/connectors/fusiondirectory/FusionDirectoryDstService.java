@@ -54,9 +54,11 @@ import javax.ws.rs.WebApplicationException;
 import org.lsc.LscDatasets;
 import org.lsc.LscModifications;
 import org.lsc.beans.IBean;
+import org.lsc.configuration.PluginConnectionType;
 import org.lsc.configuration.TaskType;
 import org.lsc.exception.LscServiceConfigurationException;
 import org.lsc.exception.LscServiceException;
+import org.lsc.plugins.connectors.fusiondirectory.generated.ServiceSettings;
 import org.lsc.service.IWritableService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,8 +67,39 @@ public class FusionDirectoryDstService extends FusionDirectoryAbstractService im
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(FusionDirectoryDstService.class);
 
+	@SuppressWarnings("unchecked")
 	public FusionDirectoryDstService(final TaskType task) throws LscServiceConfigurationException {
-		super(task);
+
+		try {
+			if (task.getPluginDestinationService().getAny() == null
+					|| task.getPluginDestinationService().getAny().size() != 1
+					|| !((task.getPluginDestinationService().getAny().get(0) instanceof ServiceSettings))) {
+				throw new LscServiceConfigurationException("Unable to identify the " + this.getClass().toString()
+						+ " configuration settings inside task: " + task.getName());
+			}
+			ServiceSettings settings = (ServiceSettings) task.getPluginDestinationService().getAny().get(0);
+			PluginConnectionType connection = (PluginConnectionType) task.getPluginDestinationService().getConnection()
+					.getReference();
+			if (connection == null) {
+				throw new LscServiceConfigurationException("Unable to identify the " + this.getClass().toString()
+						+ " connection settings inside task: " + task.getName());
+			}
+			beanClass = (Class<IBean>) Class.forName(task.getBean());
+			dao = new FusionDirectoryDao(connection.getUrl(), connection.getUsername(), connection.getPassword(),
+					settings.getSessionLifetime().intValue(), getStringParameter(settings.getDirectory()));
+			this.entity = settings.getEntity();
+			this.pivot = getStringParameter(settings.getPivot());
+			this.base = getStringParameter(settings.getBase());
+			this.filter = getStringParameter(settings.getFilter());
+			this.allFilter = getStringParameter(settings.getAllFilter());
+			this.oneFilter = getStringParameter(settings.getOneFilter());
+			this.cleanFilter = getStringParameter(settings.getCleanFilter());
+			this.template = getStringParameter(settings.getTemplate());
+			this.attributesSettings = settings.getAttributes();
+
+		} catch (Exception e) {
+			throw new LscServiceConfigurationException(e);
+		}
 	}
 
 	@Override

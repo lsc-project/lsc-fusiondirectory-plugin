@@ -15,16 +15,12 @@ import java.util.regex.Pattern;
 import org.lsc.LscDatasets;
 import org.lsc.beans.IBean;
 import org.lsc.configuration.ConnectionType;
-import org.lsc.configuration.PluginConnectionType;
-import org.lsc.configuration.TaskType;
 import org.lsc.configuration.ValuesType;
 import org.lsc.exception.LscServiceCommunicationException;
-import org.lsc.exception.LscServiceConfigurationException;
 import org.lsc.exception.LscServiceException;
 import org.lsc.plugins.connectors.fusiondirectory.generated.Attribute;
 import org.lsc.plugins.connectors.fusiondirectory.generated.Attributes;
 import org.lsc.plugins.connectors.fusiondirectory.generated.AttributesTab;
-import org.lsc.plugins.connectors.fusiondirectory.generated.ServiceSettings;
 import org.lsc.service.IService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,55 +33,18 @@ public abstract class FusionDirectoryAbstractService implements IService {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(FusionDirectoryAbstractService.class);
 	protected static final String DN = "dn";
-	protected final FusionDirectoryDao dao;
-	protected final Class<IBean> beanClass;
+	protected FusionDirectoryDao dao;
+	protected Class<IBean> beanClass;
 
-	private final String entity;
-	// private final Optional<String> directory;
-	private final Optional<String> base;
-	private final Optional<String> pivot;
-	private final Optional<String> filter;
-	private final Optional<String> allFilter;
-	private final Optional<String> oneFilter;
-	private final Optional<String> cleanFilter;
-	private final Optional<String> template;
-	private final Attributes attributesSettings;
-
-	@SuppressWarnings("unchecked")
-	public FusionDirectoryAbstractService(final TaskType task) throws LscServiceConfigurationException {
-		try {
-			if (task.getPluginDestinationService().getAny() == null
-					|| task.getPluginDestinationService().getAny().size() != 1
-					|| !((task.getPluginDestinationService().getAny().get(0) instanceof ServiceSettings))) {
-				throw new LscServiceConfigurationException(
-						"Unable to identify the " + this.getClass().toString() + " configuration settings inside task: "
-								+ task.getName());
-			}
-			ServiceSettings settings = (ServiceSettings) task.getPluginDestinationService().getAny().get(0);
-			PluginConnectionType connection = (PluginConnectionType) task.getPluginDestinationService()
-					.getConnection().getReference();
-			if (connection == null) {
-				throw new LscServiceConfigurationException(
-						"Unable to identify the " + this.getClass().toString() + " connection settings inside task: "
-								+ task.getName());
-			}
-			beanClass = (Class<IBean>) Class.forName(task.getBean());
-			dao = new FusionDirectoryDao(connection.getUrl(), connection.getUsername(), connection.getPassword(),
-					settings.getSessionLifetime().intValue(), getStringParameter(settings.getDirectory()));
-			this.entity = settings.getEntity();
-			this.pivot = getStringParameter(settings.getPivot());
-			this.base = getStringParameter(settings.getBase());
-			this.filter = getStringParameter(settings.getFilter());
-			this.allFilter = getStringParameter(settings.getAllFilter());
-			this.oneFilter = getStringParameter(settings.getOneFilter());
-			this.cleanFilter = getStringParameter(settings.getCleanFilter());
-			this.template = getStringParameter(settings.getTemplate());
-			this.attributesSettings = settings.getAttributes();
-
-		} catch (Exception e) {
-			throw new LscServiceConfigurationException(e);
-		}
-	}
+	protected String entity;
+	protected Optional<String> base;
+	protected Optional<String> pivot;
+	protected Optional<String> filter;
+	protected Optional<String> allFilter;
+	protected Optional<String> oneFilter;
+	protected Optional<String> cleanFilter;
+	protected Optional<String> template;
+	protected Attributes attributesSettings;
 
 	@Override
 	public Map<String, LscDatasets> getListPivots() throws LscServiceException {
@@ -190,7 +149,7 @@ public abstract class FusionDirectoryAbstractService implements IService {
 		return dao.getDetails(dn, entity, attributesSettings);
 	}
 
-	private Optional<String> getStringParameter(String parameter) {
+	protected Optional<String> getStringParameter(String parameter) {
 		return Optional.ofNullable(parameter).filter(f -> !f.trim().isEmpty());
 	}
 
