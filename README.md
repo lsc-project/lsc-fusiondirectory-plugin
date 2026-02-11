@@ -4,9 +4,14 @@ A Fusiondirectory connector for LSC (LDAP Synchronization Connector)
 
 ## Goal
 
-This plugin synchronizes Fusiondirectory entities from/to another LSC compatible source/destination.
+This plugin synchronizes [FusionDirectory](https://www.fusiondirectory.org/) entities from/to another [LSC](https://lsc-project.org/) compatible source/destination.
 
-This plugin uses [FusionDirectory REST API](https://rest-api.fusiondirectory.org/), available in version 1.4 of FusionDirectory
+This plugin uses [FusionDirectory REST API](https://rest-api.fusiondirectory.org/), available in version 1.4+ of FusionDirectory
+
+See also:
+
+* [LSC documentation](https://lsc-project.org/documentation/latest/index_configuration.htm)
+* [FusionDirectory documentation](https://fusiondirectory-user-manual.readthedocs.io/)
 
 ## Configuration
 
@@ -14,7 +19,7 @@ This plugin uses [FusionDirectory REST API](https://rest-api.fusiondirectory.org
 
 You need to add the plugin namespace to the main lsc.xml file, for example:
 ```xml
-<lsc xmlns="http://lsc-project.org/XSD/lsc-core-2.2.xsd" xmlns:fusiondirectory="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.0.xsd" revision="0">
+<lsc xmlns="http://lsc-project.org/XSD/lsc-core-2.2.xsd" xmlns:fusiondirectory="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.2.xsd" revision="0">
 ```
 
 ### PluginConnection
@@ -29,11 +34,13 @@ Example:
 ```xml
 <pluginConnection>
         <name>fusiondirectory</name>
-        <url>http://fusiondirectory.local/fusiondirectory/rest.php/v1</url>
+        <url>https://fusiondirectory.local/fusiondirectory/rest.php/v1</url>
         <username>fd-admin</username>
         <password>secret</password>
 </pluginConnection>
 ```
+
+Tip: If not using SSL, disable first the SSL option "Web Service" -> "Force SSL" in FusionDirectory.
 
 ### Service settings
 

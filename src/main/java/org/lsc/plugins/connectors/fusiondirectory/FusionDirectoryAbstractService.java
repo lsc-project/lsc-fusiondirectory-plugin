@@ -62,17 +62,19 @@ public abstract class FusionDirectoryAbstractService implements IService {
 	private Map<String, LscDatasets> getList(Optional<String> computedFilter) throws LscServiceException {
 		Map<String, LscDatasets> resources = new LinkedHashMap<>();
 		ObjectNode root = dao.getList(entity, base, pivot, computedFilter);
-		Iterator<Map.Entry<String, JsonNode>> iter = root.fields();
-		while (iter.hasNext()) {
-			Map.Entry<String, JsonNode> entry = iter.next();
-			Iterator<Map.Entry<String, JsonNode>> iter2 = entry.getValue().fields();
-			while (iter2.hasNext()) {
-				Map.Entry<String, JsonNode> entry2 = iter2.next();
-				String pivotValue = ((ArrayNode) entry2.getValue()).get(0).textValue();
-				LscDatasets datasets = new LscDatasets();
-				datasets.put(DN, entry.getKey());
-				datasets.put(entry2.getKey(), pivotValue);
-				resources.put(pivotValue, datasets);
+		if (root != null) {
+			Iterator<Map.Entry<String, JsonNode>> iter = root.fields();
+			while (iter.hasNext()) {
+				Map.Entry<String, JsonNode> entry = iter.next();
+				Iterator<Map.Entry<String, JsonNode>> iter2 = entry.getValue().fields();
+				while (iter2.hasNext()) {
+					Map.Entry<String, JsonNode> entry2 = iter2.next();
+					String pivotValue = ((ArrayNode) entry2.getValue()).get(0).textValue();
+					LscDatasets datasets = new LscDatasets();
+					datasets.put(DN, entry.getKey());
+					datasets.put(entry2.getKey(), pivotValue);
+					resources.put(pivotValue, datasets);
+				}
 			}
 		}
 		return resources;

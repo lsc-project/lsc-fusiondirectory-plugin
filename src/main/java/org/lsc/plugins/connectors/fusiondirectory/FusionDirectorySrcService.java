@@ -42,14 +42,11 @@
  */
 package org.lsc.plugins.connectors.fusiondirectory;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
-
-import javax.ws.rs.NotFoundException;
-import javax.ws.rs.ProcessingException;
-import javax.ws.rs.WebApplicationException;
 
 import org.lsc.LscDatasets;
 import org.lsc.beans.IBean;
@@ -61,6 +58,10 @@ import org.lsc.plugins.connectors.fusiondirectory.generated.ServiceSettings;
 import org.lsc.service.IService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.WebApplicationException;
 
 public class FusionDirectorySrcService extends FusionDirectoryAbstractService implements IService {
 
@@ -119,7 +120,7 @@ public class FusionDirectorySrcService extends FusionDirectoryAbstractService im
 		}
 		try {
 			Map<String, Object> entity = getDetails(dn);
-			IBean bean = beanClass.newInstance();
+			IBean bean = beanClass.getDeclaredConstructor().newInstance();
 			bean.setMainIdentifier(pivotValue);
 			LscDatasets datasets = new LscDatasets();
 			entity.entrySet().stream().forEach(entry -> datasets.put(entry.getKey(),
@@ -129,7 +130,7 @@ public class FusionDirectorySrcService extends FusionDirectoryAbstractService im
 		} catch (NotFoundException e) {
 			LOGGER.debug(String.format("dn %s not found", dn));
 			return null;
-		} catch (ProcessingException | WebApplicationException e) {
+		} catch (ProcessingException | WebApplicationException | NoSuchMethodException | InvocationTargetException e) {
 			LOGGER.error(String.format("Exception while getting bean with dn %s (%s)", dn, e));
 			LOGGER.error(e.toString(), e);
 			throw new LscServiceException(e);
@@ -145,7 +146,7 @@ public class FusionDirectorySrcService extends FusionDirectoryAbstractService im
 		try {
 			Optional<Entry<String, LscDatasets>> entity = findFirstByPivots(pivots, true);
 			if (entity.isPresent()) {
-				IBean bean = beanClass.newInstance();
+				IBean bean = beanClass.getDeclaredConstructor().newInstance();
 				bean.setMainIdentifier(entity.get().getKey().toString());
 				bean.setDatasets(entity.get().getValue());
 				return bean;
@@ -155,7 +156,7 @@ public class FusionDirectorySrcService extends FusionDirectoryAbstractService im
 		} catch (NotFoundException e) {
 			LOGGER.debug(String.format("%s %s not found", pivotName, pivotValue));
 			return null;
-		} catch (ProcessingException | WebApplicationException e) {
+		} catch (ProcessingException | WebApplicationException | NoSuchMethodException | InvocationTargetException e) {
 			LOGGER.error(String.format("Exception while getting bean %s/%s (%s)", pivotName, pivotValue, e));
 			LOGGER.error(e.toString(), e);
 			throw new LscServiceException(e);
