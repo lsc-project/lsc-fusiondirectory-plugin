@@ -53,15 +53,11 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.ws.rs.client.Client;
-import javax.ws.rs.client.ClientBuilder;
-import javax.ws.rs.client.Entity;
-import javax.ws.rs.client.WebTarget;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
-
-import org.glassfish.jersey.client.HttpUrlConnectorProvider;
+import org.glassfish.jersey.client.ClientConfig;
+import org.glassfish.jersey.client.ClientProperties;
+import org.glassfish.jersey.client.JerseyClientBuilder;
 import org.glassfish.jersey.jackson.JacksonFeature;
+import org.glassfish.jersey.jdk.connector.JdkConnectorProvider;
 import org.lsc.exception.LscServiceException;
 import org.lsc.plugins.connectors.fusiondirectory.beans.Login;
 import org.lsc.plugins.connectors.fusiondirectory.beans.Tab;
@@ -78,6 +74,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+
 public class FusionDirectoryDao {
 
 	private static final String UID = "uid";
@@ -87,6 +88,8 @@ public class FusionDirectoryDao {
 	private static final String OBJECTS = "objects";
 	private static final Logger LOGGER = LoggerFactory.getLogger(FusionDirectoryDao.class);
 	public static final Pattern PATTERN_ATTR_OPT = Pattern.compile("^(\\w+);(.*)$");
+	private static final int DEFAULT_CONNECT_TIMEOUT_MS = 1000;
+	private static final int DEFAULT_READ_TIMEOUT_MS = 5000;
 
 	private final String username;
 	private final String password;
@@ -106,10 +109,18 @@ public class FusionDirectoryDao {
 		this.password = password;
 		this.sessionLifetime = sessionLifetime;
 		this.directory = getDirectory(directory);
-		Client client = ClientBuilder.newClient().register(new JacksonFeature());
-		target = client.target(url);
-
+		target = clientBuilder().build().target(url);
 		tokenCache = new HashMap<>();
+	}
+
+	private JerseyClientBuilder clientBuilder() {
+		// Use JdkConnectorProvider to support PATCH HTTP method on Java 17
+		// See https://github.com/eclipse-ee4j/jersey/issues/4825
+		ClientConfig clientConfig = new ClientConfig();
+		clientConfig.connectorProvider(new JdkConnectorProvider()).register(new JacksonFeature())
+				.property(ClientProperties.CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT_MS)
+				.property(ClientProperties.READ_TIMEOUT, DEFAULT_READ_TIMEOUT_MS);
+		return new JerseyClientBuilder().withConfig(clientConfig);
 	}
 
 	private String getDirectory(Optional<String> directory) {
@@ -121,7 +132,7 @@ public class FusionDirectoryDao {
 	}
 
 
-	public Token startSession() throws LscServiceException {
+	private Token startSession() throws LscServiceException {
 		Response response = null;
 		try {
 			Login login = new Login();
@@ -129,7 +140,8 @@ public class FusionDirectoryDao {
 			login.setPassword(password);
 			login.setDirectory(directory);
 			WebTarget currentTarget = target.path("login");
-			LOGGER.info(String.format("Login to FusionDirectory %s as %s for thread %s", currentTarget.getUri().toString(), username, Thread.currentThread().getId()));
+			LOGGER.info(String.format("Login to FusionDirectory %s as %s for thread %s ... ",
+					currentTarget.getUri().toString(), username, Thread.currentThread().threadId()));
 			response = currentTarget.request().post(Entity.entity(login, MediaType.APPLICATION_JSON));
 			if (!checkResponse(response)) {
 				String errorMessage = String.format("Cannot log in Fusiondirectory, message: %s", response.readEntity(String.class));
@@ -147,12 +159,14 @@ public class FusionDirectoryDao {
 		Response response = null;
 		try {
 			WebTarget currentTarget = target.path("logout");
-			LOGGER.info(String.format("Logout from FusionDirectory %s as %s for thread %s", currentTarget.getUri().toString(), username, Thread.currentThread().getId()));
+			LOGGER.info(String.format("Logout from FusionDirectory %s as %s for thread %s",
+					currentTarget.getUri().toString(), username, Thread.currentThread().threadId()));
 			response = currentTarget.request().header(SESSION_TOKEN, token.getSessionId()).post(Entity.json(null));
 			if (!checkResponse(response)) {
 				String warnMessage = String.format("Cannot logout from Fusiondirectory, message: %s", response.readEntity(String.class));
 				LOGGER.warn(warnMessage);
 			}
+			response.readEntity(String.class);
 		} finally {
 			if (response != null) {
 				response.close();
@@ -161,65 +175,76 @@ public class FusionDirectoryDao {
 	}
 	private Token getToken(boolean resetSession) throws LscServiceException {
 		if (resetSession == true) {
-			LOGGER.info(String.format("Reset FusionDirectory session as %s for thread %s", username, Thread.currentThread().getId()));
+			LOGGER.info(String.format("Reset FusionDirectory session as %s for thread %s", username,
+					Thread.currentThread().threadId()));
 		}
 		synchronized (tokenCache) {
-			Token token = tokenCache.get(String.valueOf(Thread.currentThread().getId()));
+			Token token = tokenCache.get(String.valueOf(Thread.currentThread().threadId()));
 			if (token != null && token.hasExpired(this.sessionLifetime)) {
-				LOGGER.info(String.format("Expire FusionDirectory session for thread %s after %s seconds.", Thread.currentThread().getId(), this.sessionLifetime));
+				LOGGER.info(String.format("Expire FusionDirectory session for thread %s after %s seconds.",
+						Thread.currentThread().threadId(), this.sessionLifetime));
 				closeSession(token);
 				resetSession = true;
 			}
 			if (token == null || resetSession) {
 				token = startSession();
-				tokenCache.put(String.valueOf(Thread.currentThread().getId()), token);
+				tokenCache.put(String.valueOf(Thread.currentThread().threadId()), token);
 			}
 			return token;
 		}
 	}
 
-	public Response httpGet(WebTarget webTarget) throws LscServiceException {
+	private Response httpGet(WebTarget webTarget) throws LscServiceException {
 		return httpGet(webTarget, false);
 	}
 	private Response httpGet(WebTarget webTarget, boolean resetSession) throws LscServiceException {
-		Response response = webTarget.request().accept(MediaType.APPLICATION_JSON).header(SESSION_TOKEN, getToken(resetSession).getSessionId()).get(Response.class);
+		Response response = webTarget.request().accept(MediaType.APPLICATION_JSON)
+				.header(SESSION_TOKEN, getToken(resetSession).getSessionId()).get(Response.class);
 		if (!resetSession && Response.Status.fromStatusCode(response.getStatus()) == Response.Status.UNAUTHORIZED) {
+			response.close();
 			// Try again once to restart session.
 			return httpGet(webTarget, true);
 		}
+		
 		if (!checkResponse(response)) {
 			String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
 					response.readEntity(String.class));
+			response.close();
 			LOGGER.error(errorMessage);
 			throw new LscServiceException(errorMessage);
 		}
 		return response;
 	}
 
-	public Response httpPost(WebTarget webTarget, Entity<?> entity) throws LscServiceException {
+	private Response httpPost(WebTarget webTarget, Entity<?> entity) throws LscServiceException {
 		return httpPost(webTarget, entity, false);
 	}
 	private Response httpPost(WebTarget webTarget, Entity<?> entity, boolean resetSession) throws LscServiceException {
-		Response response = webTarget.request().header(SESSION_TOKEN, getToken(resetSession).getSessionId()).post(entity);
+		Response response = webTarget.request().header(SESSION_TOKEN, getToken(resetSession).getSessionId())
+				.post(entity);
 		if (!resetSession && Response.Status.fromStatusCode(response.getStatus()) == Response.Status.UNAUTHORIZED) {
+			response.close();
 			// Try again once to restart session.
 			return httpPost(webTarget, entity, true);
 		}
 		if (!checkResponse(response)) {
 			String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
 					response.readEntity(String.class));
+			response.close();
 			LOGGER.error(errorMessage);
 			throw new LscServiceException(errorMessage);
 		}
 		return response;
 	}
 
-	public Response httpPatch(WebTarget webTarget, Entity<?> entity) throws LscServiceException {
+	private Response httpPatch(WebTarget webTarget, Entity<?> entity) throws LscServiceException {
 		return httpPatch(webTarget, entity, false);
 	}
 	private Response httpPatch(WebTarget webTarget, Entity<?> entity, boolean resetSession) throws LscServiceException {
-		Response response = webTarget.request().header(SESSION_TOKEN, getToken(resetSession).getSessionId()).method("PATCH", entity);
+		Response response = webTarget.request().header(SESSION_TOKEN, getToken(resetSession).getSessionId())
+				.method("PATCH", entity);
 		if (!resetSession && Response.Status.fromStatusCode(response.getStatus()) == Response.Status.UNAUTHORIZED) {
+			response.close();
 			// Try again once to restart session.
 			return httpPatch(webTarget, entity, true);
 		}
@@ -227,12 +252,13 @@ public class FusionDirectoryDao {
 			String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
 					response.readEntity(String.class));
 			LOGGER.error(errorMessage);
+			response.close();
 			throw new LscServiceException(errorMessage);
 		}
 		return response;
 	}
 
-	public Response httpPut(WebTarget webTarget, Entity<?> entity) throws LscServiceException {
+	private Response httpPut(WebTarget webTarget, Entity<?> entity) throws LscServiceException {
 		return httpPut(webTarget, entity, false);
 	}
 
@@ -240,6 +266,7 @@ public class FusionDirectoryDao {
 		Response response = webTarget.request().header(SESSION_TOKEN, getToken(resetSession).getSessionId())
 				.put(entity);
 		if (!resetSession && Response.Status.fromStatusCode(response.getStatus()) == Response.Status.UNAUTHORIZED) {
+			response.close();
 			// Try again once to restart session.
 			return httpPut(webTarget, entity, true);
 		}
@@ -247,23 +274,26 @@ public class FusionDirectoryDao {
 			String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
 					response.readEntity(String.class));
 			LOGGER.error(errorMessage);
+			response.close();
 			throw new LscServiceException(errorMessage);
 		}
 		return response;
 	}
 
-	public Response httpDelete(WebTarget webTarget) throws LscServiceException {
+	private Response httpDelete(WebTarget webTarget) throws LscServiceException {
 		return httpDelete(webTarget, false);
 	}
 	private Response httpDelete(WebTarget webTarget, boolean resetSession) throws LscServiceException {
 		Response response = webTarget.request().header(SESSION_TOKEN, getToken(resetSession).getSessionId()).delete();
 		if (!resetSession && Response.Status.fromStatusCode(response.getStatus()) == Response.Status.UNAUTHORIZED) {
+			response.close();
 			// Try again once to restart session.
 			return httpDelete(webTarget, true);
 		}
 		if (!checkResponse(response)) {
 			String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
 					response.readEntity(String.class));
+			response.close();
 			LOGGER.error(errorMessage);
 			throw new LscServiceException(errorMessage);
 		}
@@ -284,10 +314,9 @@ public class FusionDirectoryDao {
 			if (pivot.isPresent()) {
 				currentTarget = currentTarget.queryParam("attrs[" + getPivotName(pivot) + "]", "*");
 			}
-			LOGGER.debug(String.format("Search %s from: %s with filter %s ", entity, currentTarget.getUri().toString(), computedFilter));
-			response = httpGet(currentTarget);
-			
-			return (ObjectNode) mapper.readTree(response.readEntity(String.class));
+			LOGGER.debug(String.format("Search %s from: %s with filter %s ", entity, currentTarget.getUri().toString(),
+					computedFilter));
+			return (ObjectNode) mapper.readTree(httpGet(currentTarget).readEntity(String.class));
 
 		} catch (JsonProcessingException e) {
 			throw new LscServiceException(e);
@@ -306,24 +335,25 @@ public class FusionDirectoryDao {
 	public Map<String, Object> getDetails(String dn, String entity, Attributes attributesSettings)
 			throws LscServiceException {
 
-		Response response = null;
-		try {
+		Map<String, Object> results = new HashMap<>();
+		results.put(DN, dn);
 
-			Map<String, Object> results = new HashMap<>();
-			results.put(DN, dn);
+		// Check for inactive tabs before requesting them (if an inactive tab is
+		// requested, a 400 error is sent)
+		List<Tab> tabs = getEntityTabs(dn, entity);
 
-			// Check for inactive tabs before requesting them (if an inactive tab is requested, a 400 error is sent)
-			List<Tab> tabs = getEntityTabs(dn, entity);
-
-			for (AttributesTab attributesTab: attributesSettings.getTab()) {
-				Optional<Tab> tab = tabs.stream().filter(p -> p.getClass_().equals(attributesTab.getName())).findFirst();
-				if (!tab.isPresent()) {
-					String errorMessage = String.format("Tab %s do not exists for object %s", attributesTab.getName(), entity);
-					LOGGER.error(errorMessage);
-					throw new LscServiceException(errorMessage);
-				}
-				if (tab.get().getActive()) {
-					WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(attributesTab.getName());
+		for (AttributesTab attributesTab : attributesSettings.getTab()) {
+			Optional<Tab> tab = tabs.stream().filter(p -> p.getClass_().equals(attributesTab.getName())).findFirst();
+			if (!tab.isPresent()) {
+				String errorMessage = String.format("Tab %s do not exists for object %s", attributesTab.getName(),
+						entity);
+				LOGGER.error(errorMessage);
+				throw new LscServiceException(errorMessage);
+			}
+			if (tab.get().getActive()) {
+				WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(attributesTab.getName());
+				Response response = null;
+				try {
 					response = httpGet(currentTarget);
 					Map<String, Object> raw = mapper.readValue(response.readEntity(String.class), Map.class);
 					for (Attribute attribute : attributesTab.getAttribute()) {
@@ -353,16 +383,16 @@ public class FusionDirectoryDao {
 							results.put(attribute.getValue(), value);
 						}
 					}
+				} catch (JsonProcessingException e) {
+					throw new LscServiceException(e);
+				} finally {
+					if (response != null) {
+						response.close();
+					}
 				}
 			}
-			return results;
-		} catch (JsonProcessingException e) {
-			throw new LscServiceException(e);
-		} finally {
-			if (response != null) {
-				response.close();
-			}
 		}
+		return results;
 	}
 
 	public static boolean isOptionAttribute(String attribute) {
@@ -409,6 +439,7 @@ public class FusionDirectoryDao {
 		Response response = null;
 		try {
 			response = httpPost(currentTarget, Entity.entity(payload, MediaType.APPLICATION_JSON));
+			response.readEntity(String.class);
 		} finally {
 			if (response != null) {
 				response.close();
@@ -423,9 +454,8 @@ public class FusionDirectoryDao {
 			throws LscServiceException {
 
 		if (updateAttributes.size() > 0) {
-				WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn);
-				currentTarget.property(HttpUrlConnectorProvider.SET_METHOD_WORKAROUND, true);
-				Response response = null;
+			WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn);
+			Response response = null;
 				try {
 					response = httpPatch(currentTarget, Entity.entity(updateAttributes, MediaType.APPLICATION_JSON));
 				} finally {
@@ -440,6 +470,7 @@ public class FusionDirectoryDao {
 				try {
 					WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(deleteAttr);
 					response = httpDelete(currentTarget);
+					response.readEntity(String.class);
 				} finally {
 					if (response != null) {
 						response.close();
@@ -512,7 +543,8 @@ public class FusionDirectoryDao {
 		return results;
 	}
 
-	public void setAttribute(String entity, String dn, String tab, String attribute, List<String> values, boolean isMultiple) throws LscServiceException {
+	public void setAttribute(String entity, String dn, String tab, String attribute, List<String> values,
+			boolean isMultiple) throws LscServiceException {
 		Object payload = isMultiple ? values : "\"" + values.get(0) + "\"";
 		WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(tab).path(attribute);
 		Response response = null;

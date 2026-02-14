@@ -6,7 +6,19 @@
 	<artifactId>fusiondirectory</artifactId>
 	<version>1.2-SNAPSHOT</version>
 	<name>LSC Fusion Directory Connector</name>
-	<url></url>
+	<url>https://lsc-project.org/</url>
+
+	<issueManagement>
+		<system>github</system>
+		<url>https://github.com/lsc-project/lsc-fusiondirectory-plugin/issues</url>
+	</issueManagement>
+
+	<licenses>
+		<license>
+			<name>BSD</name>
+			<url>https://www.opensource.org/licenses/bsd-license.php</url>
+		</license>
+	</licenses>
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -46,26 +58,34 @@
 			</exclusions>
 		</dependency>
 		<dependency>
-			<groupId>javax.xml.bind</groupId>
-			<artifactId>jaxb-api</artifactId>
-			<version>2.3.0</version>
-			<scope>provided</scope>
-		</dependency>
-
-		<dependency>
 			<groupId>org.glassfish.jersey.core</groupId>
 			<artifactId>jersey-client</artifactId>
-			<version>2.31</version>
+			<version>4.0.2</version>
 		</dependency>
 		<dependency>
 			<groupId>org.glassfish.jersey.inject</groupId>
 			<artifactId>jersey-hk2</artifactId>
-			<version>2.31</version>
+			<version>4.0.2</version>
 		</dependency>
 		<dependency>
 			<groupId>org.glassfish.jersey.media</groupId>
 			<artifactId>jersey-media-json-jackson</artifactId>
-			<version>2.31</version>
+			<version>4.0.2</version>
+		</dependency>
+        <dependency>
+            <groupId>org.glassfish.jersey.connectors</groupId>
+            <artifactId>jersey-jdk-connector</artifactId>
+            <version>4.0.2</version>
+        </dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-core</artifactId>
+			<version>2.18.2</version>
+		</dependency>
+		<dependency>
+			<groupId>jakarta.xml.bind</groupId>
+			<artifactId>jakarta.xml.bind-api</artifactId>
+			<version>3.0.1</version>
 		</dependency>
 	</dependencies>
 
@@ -76,7 +96,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
-				<version>2.22.0</version>
+				<version>3.5.2</version>
 			</plugin>
 			<plugin>
 				<artifactId>maven-compiler-plugin</artifactId>
@@ -84,6 +104,7 @@
 				<configuration>
 					<source>21</source>
 					<target>21</target>
+					<release>21</release>
 					<encoding>UTF-8</encoding>
 				</configuration>
 				<executions>
@@ -147,6 +168,11 @@
 							<goal>single</goal>
 						</goals>
 						<configuration>
+							<archive>
+								<manifestEntries>
+									<Multi-Release>true</Multi-Release>
+								</manifestEntries>
+							</archive>
 							<descriptors>
 								<descriptor>assembly.xml</descriptor>
 							</descriptors>
@@ -157,7 +183,7 @@
 		</plugins>
 		<pluginManagement>
 			<plugins>
-				<!--This plugin's configuration is used to store Eclipse m2e settings only. It has no influence on the Maven build itself.-->
+				<!-- This plugin's configuration is used to store Eclipse m2e settings only. It has no influence on the Maven build itself.-->
 				<plugin>
 					<groupId>org.eclipse.m2e</groupId>
 					<artifactId>lifecycle-mapping</artifactId>

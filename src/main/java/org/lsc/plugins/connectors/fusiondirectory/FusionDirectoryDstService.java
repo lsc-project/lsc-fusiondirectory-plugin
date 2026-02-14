@@ -42,14 +42,12 @@
  */
 package org.lsc.plugins.connectors.fusiondirectory;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
-
-import javax.ws.rs.ProcessingException;
-import javax.ws.rs.WebApplicationException;
 
 import org.lsc.LscDatasets;
 import org.lsc.LscModifications;
@@ -62,6 +60,9 @@ import org.lsc.plugins.connectors.fusiondirectory.generated.ServiceSettings;
 import org.lsc.service.IWritableService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.WebApplicationException;
 
 public class FusionDirectoryDstService extends FusionDirectoryAbstractService implements IWritableService {
 
@@ -113,7 +114,7 @@ public class FusionDirectoryDstService extends FusionDirectoryAbstractService im
 				
 				Map<String, Object> details = getDetails(dn);
 				
-				IBean bean = beanClass.newInstance();
+				IBean bean = beanClass.getDeclaredConstructor().newInstance();
 				bean.setMainIdentifier(entity.get().getValue().getStringValueAttribute(pivotName));
 				
 				LscDatasets datasets = new LscDatasets();
@@ -126,7 +127,7 @@ public class FusionDirectoryDstService extends FusionDirectoryAbstractService im
 			} else {
 				return null;
 			}
-		} catch (ProcessingException | WebApplicationException e) {
+		} catch (ProcessingException | WebApplicationException | NoSuchMethodException | InvocationTargetException e) {
 			LOGGER.error(String.format("Exception while getting bean %s/%s (%s)", pivotName, pivotValue, e));
 			LOGGER.error(e.toString(), e);
 			throw new LscServiceException(e);

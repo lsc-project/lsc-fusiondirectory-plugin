@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.0.xsd"
-	targetNamespace="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.0.xsd" elementFormDefault="qualified" xmlns:jaxb="http://java.sun.com/xml/ns/jaxb"
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.2.xsd"
+	targetNamespace="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.2.xsd" elementFormDefault="qualified" xmlns:jaxb="http://java.sun.com/xml/ns/jaxb"
 	xmlns:lsc="http://lsc-project.org/XSD/lsc-core-2.2.xsd" jaxb:version="2.1">
 
 	<xsd:import namespace="http://lsc-project.org/XSD/lsc-core-2.2.xsd" schemaLocation="lsc-core-2.2.xsd" />
