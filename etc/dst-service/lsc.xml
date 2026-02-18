@@ -1,19 +1,32 @@
 <?xml version="1.0" ?>
-<lsc xmlns="http://lsc-project.org/XSD/lsc-core-2.2.xsd" xmlns:fusiondirectory="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.0.xsd">
+<lsc xmlns="http://lsc-project.org/XSD/lsc-core-2.2.xsd"
+	revision="0"
+	xmlns:fusiondirectory="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.2.xsd">
+	<!--
+	See online documentation:
+	     - LSC: https://lsc-project.org/documentation/latest/index_configuration.html
+	     - FusionDirectory plugin: https://github.com/lsc-project/lsc-fusiondirectory-plugin/blob/master/README.md
+	-->
 	<connections>
 		<pluginConnection>
 			<name>fusiondirectory</name>
-			<url>http://10.4.158.72/fusiondirectory/rest.php/v1</url>
+			<url>https://fusion.lxd/rest.php/v1</url>
 			<username>fd-admin</username>
 			<password>secret</password>
 		</pluginConnection>
 		<ldapConnection>
 			<name>openldap</name>
-			<url>ldap://localhost/dc=lsc,dc=local</url>
-			<username>cn=Manager,dc=lsc,dc=local</username>
+			<url>ldap://fusion.lxd/dc=my-domain,dc=com</url>
+			<username>cn=Manager,dc=my-domain,dc=com</username>
 			<password>secret</password>
 			<authentication>SIMPLE</authentication>
-			<pageSize>1000</pageSize>
+			<referral>IGNORE</referral>
+			<derefAliases>NEVER</derefAliases>
+			<version>VERSION_3</version>
+			<pageSize>-1</pageSize>
+			<factory>com.sun.jndi.ldap.LdapCtxFactory</factory>
+			<tlsActivated>false</tlsActivated>
+			<saslMutualAuthentication>false</saslMutualAuthentication>
 		</ldapConnection>
 	</connections>
 	<tasks>
@@ -23,7 +36,7 @@
 			<ldapSourceService>
 				<name>src-service</name>
 				<connection reference="openldap" />
-				<baseDn>ou=fusion,dc=lsc,dc=local</baseDn>
+				<baseDn>ou=ldap,dc=my-domain,dc=com</baseDn>
 				<pivotAttributes>
 					<string>uid</string>
 				</pivotAttributes>
@@ -38,7 +51,7 @@
 				</fetchedAttributes>
 				<getAllFilter><![CDATA[(objectClass=inetOrgPerson)]]></getAllFilter>
 				<getOneFilter><![CDATA[(&(objectClass=inetOrgPerson)(uid={uid}))]]></getOneFilter>
-				<cleanFilter><![CDATA[(&(objectClass=inetOrgPerson)(sn={uid}))]]></cleanFilter>
+				<cleanFilter><![CDATA[(&(objectClass=inetOrgPerson)(uid={uid}))]]></cleanFilter>
 			</ldapSourceService>
 			<pluginDestinationService implementationClass="org.lsc.plugins.connectors.fusiondirectory.FusionDirectoryDstService">
 				<name>fusiondirectory-users-dest-service</name>
@@ -46,8 +59,12 @@
 				<fusiondirectory:serviceSettings>
 					<name>fusiondirectory-service-settings</name>
 					<connection reference="fusiondirectory" />
+					<fusiondirectory:sessionLifetime>300</fusiondirectory:sessionLifetime>
 					<fusiondirectory:entity>USER</fusiondirectory:entity>
 					<fusiondirectory:pivot>uid</fusiondirectory:pivot>
+					<fusiondirectory:base>ou=fusion,dc=my-domain,dc=com</fusiondirectory:base>
+					<fusiondirectory:filter><![CDATA[(objectClass=inetOrgPerson)]]></fusiondirectory:filter>
+					<fusiondirectory:oneFilter><![CDATA[(uid={uid})]]></fusiondirectory:oneFilter>
 					<fusiondirectory:attributes>
 						<fusiondirectory:tab name="user">
 							<fusiondirectory:attribute>uid</fusiondirectory:attribute>
@@ -55,8 +72,10 @@
 							<fusiondirectory:attribute>base</fusiondirectory:attribute>
 							<fusiondirectory:attribute>sn</fusiondirectory:attribute>
 							<fusiondirectory:attribute>givenName</fusiondirectory:attribute>
-							<fusiondirectory:attribute multiple="true">title</fusiondirectory:attribute>
-							<fusiondirectory:attribute>userPassword</fusiondirectory:attribute>
+							<fusiondirectory:attribute
+								multiple="true">title</fusiondirectory:attribute>
+							<fusiondirectory:attribute
+								passwordHash="empty">userPassword</fusiondirectory:attribute>
 						</fusiondirectory:tab>
 						<fusiondirectory:tab name="mailAccount">
 							<fusiondirectory:attribute>mail</fusiondirectory:attribute>
@@ -75,28 +94,18 @@
 					<changeId>false</changeId>
 				</conditions>
 				<dataset>
-					<name>objectclass</name>
+					<name>userPassword</name>
 					<policy>KEEP</policy>
 					<createValues>
-						<string>"inetOrgPerson"</string>
-						<string>"organizationalPerson"</string>
-						<string>"person"</string>
-						<string>"top"</string>
+						<string><![CDATA[""]]></string>
 					</createValues>
 				</dataset>
 				<dataset>
 					<name>base</name>
 					<policy>FORCE</policy>
 					<forceValues>
-						<string>"ou=org1,dc=fusiondirectory,dc=dev"</string>
+						<string>"ou=fusion,dc=my-domain,dc=com"</string>
 					</forceValues>
-				</dataset>
-				<dataset>
-					<name>userPassword</name>
-					<policy>KEEP</policy>
-					<createValues>
-						<string><![CDATA[srcBean.getDatasetFirstValueById("uid")]]></string>
-					</createValues>
 				</dataset>
 			</propertiesBasedSyncOptions>
 		</task>

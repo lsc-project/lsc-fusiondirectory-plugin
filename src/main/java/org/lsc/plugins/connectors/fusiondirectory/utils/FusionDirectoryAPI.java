@@ -9,7 +9,6 @@ import java.util.Optional;
 
 import org.lsc.exception.LscServiceException;
 import org.lsc.plugins.connectors.fusiondirectory.FusionDirectoryDao;
-import org.lsc.plugins.connectors.fusiondirectory.FusionDirectoryDstService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,10 +49,12 @@ public class FusionDirectoryAPI {
 		Optional<String> filter = Optional.ofNullable(filterString).filter(f -> !f.trim().isEmpty());
 		List<String> results = new ArrayList<>();
 		ObjectNode root = dao.getList(entity, base, Optional.empty(), filter);
-		Iterator<Map.Entry<String, JsonNode>> iter = root.fields();
-		while (iter.hasNext()) {
-			Map.Entry<String, JsonNode> entry = iter.next();
-			results.add(entry.getKey());
+		if (root != null) {
+			Iterator<Map.Entry<String, JsonNode>> iter = root.fields();
+			while (iter.hasNext()) {
+				Map.Entry<String, JsonNode> entry = iter.next();
+				results.add(entry.getKey());
+			}
 		}
 		return results;
 	}
