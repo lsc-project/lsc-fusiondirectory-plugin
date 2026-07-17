@@ -49,6 +49,7 @@ import java.util.Map.Entry;
 import java.util.Optional;
 
 import org.lsc.LscDatasets;
+import org.lsc.Task;
 import org.lsc.beans.IBean;
 import org.lsc.configuration.PluginConnectionType;
 import org.lsc.configuration.TaskType;
@@ -103,7 +104,7 @@ public class FusionDirectorySrcService extends FusionDirectoryAbstractService im
 	}
 
 	@Override
-	public IBean getBean(String pivotRawValue, LscDatasets lscDatasets, boolean fromSameService)
+	public IBean getBean(Task task, String pivotRawValue, LscDatasets lscDatasets, boolean fromSameService)
 			throws LscServiceException {
 		LOGGER.debug(String.format("Call to getBean(%s, %s, %b)", pivotRawValue, lscDatasets, fromSameService));
 		if (lscDatasets.getAttributesNames().size() < 1) {

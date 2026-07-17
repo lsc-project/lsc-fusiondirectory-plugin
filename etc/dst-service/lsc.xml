@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
-<lsc xmlns="http://lsc-project.org/XSD/lsc-core-2.2.xsd"
+<lsc xmlns="http://lsc-project.org/XSD/lsc-core-2.3.xsd"
 	revision="0"
-	xmlns:fusiondirectory="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.2.xsd">
+	xmlns:fusiondirectory="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.3.xsd">
 	<!--
 	See online documentation:
 	     - LSC: https://lsc-project.org/documentation/latest/index_configuration.html
@@ -49,9 +49,9 @@
 					<string>mail</string>
 					<string>title</string>
 				</fetchedAttributes>
-				<getAllFilter><![CDATA[(objectClass=inetOrgPerson)]]></getAllFilter>
-				<getOneFilter><![CDATA[(&(objectClass=inetOrgPerson)(uid={uid}))]]></getOneFilter>
-				<cleanFilter><![CDATA[(&(objectClass=inetOrgPerson)(uid={uid}))]]></cleanFilter>
+				<allEntriesFilter><![CDATA["(objectClass=inetOrgPerson)"]]></allEntriesFilter>
+				<oneEntryFilter><![CDATA["(&(objectClass=inetOrgPerson)(uid=" + pivotAttributes["uid"] + "))"]]></oneEntryFilter>
+				<cleanEntryFilter><![CDATA["(&(objectClass=inetOrgPerson)(uid=" + pivotAttributes["uid"] + "))"]]></cleanEntryFilter>
 			</ldapSourceService>
 			<pluginDestinationService implementationClass="org.lsc.plugins.connectors.fusiondirectory.FusionDirectoryDstService">
 				<name>fusiondirectory-users-dest-service</name>
