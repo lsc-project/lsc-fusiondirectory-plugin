@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 import org.lsc.LscDatasetModification;
 import org.lsc.LscDatasetModification.LscDatasetModificationType;
 import org.lsc.LscDatasets;
+import org.lsc.Task;
 import org.lsc.beans.IBean;
 import org.lsc.configuration.ConnectionType;
 import org.lsc.configuration.ValuesType;
@@ -48,7 +49,7 @@ public abstract class FusionDirectoryAbstractService implements IService {
 	protected Attributes attributesSettings;
 
 	@Override
-	public Map<String, LscDatasets> getListPivots() throws LscServiceException {
+	public Map<String, LscDatasets> getListPivots(Task task) throws LscServiceException {
 		try {
 			return this.getList();
 		} catch (Exception e) {

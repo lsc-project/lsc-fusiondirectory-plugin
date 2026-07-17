@@ -19,7 +19,7 @@ See also:
 
 You need to add the plugin namespace to the main lsc.xml file, for example:
 ```xml
-<lsc xmlns="http://lsc-project.org/XSD/lsc-core-2.2.xsd" xmlns:fusiondirectory="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.2.xsd" revision="0">
+<lsc xmlns="http://lsc-project.org/XSD/lsc-core-2.3.xsd" xmlns:fusiondirectory="http://lsc-project.org/XSD/lsc-fusiondirectory-plugin-1.3.xsd" revision="0">
 ```
 
 ### PluginConnection
@@ -134,7 +134,7 @@ Tips:
 
 #### Filters
 
-You *may* defined these filters to retrieve objects:
+You *may* define these filters to retrieve objects:
 
 In both source and destination service, you can define _filter_ to retrieve all or any individual entries during sync phase or clean phase.
 
