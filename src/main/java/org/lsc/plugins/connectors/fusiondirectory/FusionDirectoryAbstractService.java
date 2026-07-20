@@ -12,6 +12,8 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.lsc.LscDatasetModification;
+import org.lsc.LscDatasetModification.LscDatasetModificationType;
 import org.lsc.LscDatasets;
 import org.lsc.beans.IBean;
 import org.lsc.configuration.ConnectionType;
@@ -113,16 +115,18 @@ public abstract class FusionDirectoryAbstractService implements IService {
 	}
 
 
-	protected boolean create(Map<String, List<Object>> modificationsItemsByHash) throws LscServiceException {
-		return dao.create(entity, prepareAttributes(modificationsItemsByHash), template);
+	protected boolean create(List<LscDatasetModification> modifications) throws LscServiceException {
+		return dao.create(entity, prepareAttributes(modifications, true), template);
 	}
 
-	public boolean modify(String mainIdentifier, Map<String, List<Object>> modificationsItemsByHash) throws LscServiceException {
+	public boolean modify(String mainIdentifier, List<LscDatasetModification> modifications)
+			throws LscServiceException {
 		// retrieve DN
 		Optional<Entry<String, LscDatasets>> entry = findFirstByPivot(mainIdentifier);
 		if (entry.isPresent()) {
 			return dao.modify(entity, entry.get().getValue().getStringValueAttribute(DN),
-					prepareAttributes(modificationsItemsByHash), prepareAttributesToDelete(modificationsItemsByHash));
+					prepareAttributes(modifications, false), prepareAttributesToDelete(modifications),
+					prepareMultipleAttributes(modifications));
 		}
 		throw new LscServiceException(String.format("Cannot find entity %s", mainIdentifier));
 	}
@@ -154,22 +158,28 @@ public abstract class FusionDirectoryAbstractService implements IService {
 		return Optional.ofNullable(parameter).filter(f -> !f.trim().isEmpty());
 	}
 
-	private Map<String, Map<String, Object>> prepareAttributes(Map<String, List<Object>> modificationsItemsByHash)
+	private Map<String, Map<String, Object>> prepareAttributes(
+			List<LscDatasetModification> modifications, boolean createMode)
 			throws LscServiceException {
+
 		Map<String, Map<String, Object>> attrs = new HashMap<String, Map<String, Object>>();
-		for (String attribute : modificationsItemsByHash.keySet()) {
-			TabAttribute tabAttribute = getTabAttribute(attribute);
-			if (modificationsItemsByHash.get(attribute) instanceof ArrayList<?> list) {
-				if (!list.isEmpty() || tabAttribute.getAttribute().isMultiple() || tabAttribute.isOption()) {
+		for (LscDatasetModification attributeModification : modifications) {
+			TabAttribute tabAttribute = getTabAttribute(attributeModification.getAttributeName().toLowerCase());
+			if (attributeModification.getValues() instanceof ArrayList<?> list) {
+				if (!list.isEmpty() || tabAttribute.isOption()) {
 					if (attrs.get(tabAttribute.getTab()) == null) {
-						attrs.put(tabAttribute.getTab(), new HashMap<String, Object>());
+						attrs.put(tabAttribute.getTab(),
+								new HashMap<String, Object>());
 					}
 					if (tabAttribute.isOption()) {
 						String attributeShortName = tabAttribute.stripOptionFromAttributeName();
 						attrs.get(tabAttribute.getTab()).put(attributeShortName, tabAttribute
 								.getOptionValues(attrs.get(tabAttribute.getTab()).get(attributeShortName), list));
 					} else if (tabAttribute.getAttribute().isMultiple()) {
-						attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list);
+						if (createMode || attributeModification.getOperation()
+								.equals(LscDatasetModificationType.REPLACE_VALUES)) {
+							attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(), list);
+						}
 					} else if (tabAttribute.getAttribute().getPasswordHash() != null) {
 						// specific use case for userPassword attribute: need to be sent as an array
 						// with hash to be set, otherwise new password is ignored by Fusiondirectory if
@@ -181,29 +191,70 @@ public abstract class FusionDirectoryAbstractService implements IService {
 					}
 				}
 			} else {
-				throw new LscServiceException(String.format("%s is not a supported type for attribute %s",
-						modificationsItemsByHash.get(attribute).getClass().toString(), attribute));
+				throw new LscServiceException(
+						String.format("%s is not a supported type for attribute %s",
+						attributeModification.getValues().getClass().toString(),
+						attributeModification.getAttributeName()));
 			}
 		}
 		return attrs;
 	}
 
-	private List<String> prepareAttributesToDelete(Map<String, List<Object>> modificationsItemsByHash)
+	private List<String> prepareAttributesToDelete(List<LscDatasetModification> modifications)
 			throws LscServiceException {
 		List<String> toDelete = new ArrayList<>();
-		for (String attribute : modificationsItemsByHash.keySet()) {
-			TabAttribute tabAttribute = getTabAttribute(attribute);
-			if (modificationsItemsByHash.get(attribute) instanceof ArrayList<?> list) {
-				if (list.isEmpty()
-						&& !tabAttribute.getAttribute().isMultiple() && !tabAttribute.isOption()) {
-					toDelete.add(tabAttribute.getTab() + "/" + tabAttribute.getAttribute().getValue());
+
+		for (LscDatasetModification attributeModification : modifications) {
+			if (attributeModification.getOperation()
+					.equals(LscDatasetModification.LscDatasetModificationType.DELETE_VALUES)) {
+				String attribute = attributeModification.getAttributeName().toLowerCase();
+				TabAttribute tabAttribute = getTabAttribute(attribute);
+				if (attributeModification.getValues() instanceof ArrayList<?> list) {
+					if (list.isEmpty() && !tabAttribute.isOption()) {
+						toDelete.add(tabAttribute.getTab() + "/" + tabAttribute.getAttribute().getValue());
+					}
+				} else {
+					throw new LscServiceException(String.format(
+							"%s is not a supported type for attribute %s",
+							attributeModification.getValues().getClass().toString(), attribute));
 				}
-			} else {
-				throw new LscServiceException(String.format("%s is not a supported type for attribute %s",
-						modificationsItemsByHash.get(attribute).getClass().toString(), attribute));
 			}
 		}
+
 		return toDelete;
+	}
+
+	private Map<String, Map<String, Map<LscDatasetModificationType, ArrayList<?>>>> prepareMultipleAttributes(
+			List<LscDatasetModification> modifications) throws LscServiceException {
+		Map<String, Map<String, Map<LscDatasetModificationType, ArrayList<?>>>> attrs = new HashMap<String, Map<String, Map<LscDatasetModificationType, ArrayList<?>>>>();
+		for (LscDatasetModification attributeModification : modifications) {
+			TabAttribute tabAttribute = getTabAttribute(attributeModification.getAttributeName().toLowerCase());
+			if (tabAttribute.getAttribute().isMultiple()) {
+				if (attributeModification.getValues() instanceof ArrayList<?> list) {
+					if (!list.isEmpty()
+							&& (!attributeModification.getOperation().equals(LscDatasetModificationType.ADD_VALUES)
+									|| !attributeModification.getOperation()
+											.equals(LscDatasetModificationType.DELETE_VALUES))) {
+						if (attrs.get(tabAttribute.getTab()) == null) {
+							attrs.put(tabAttribute.getTab(),
+									new HashMap<String, Map<LscDatasetModificationType, ArrayList<?>>>());
+						}
+						if (attrs.get(tabAttribute.getTab()).get(tabAttribute.getAttribute().getValue()) == null) {
+							attrs.get(tabAttribute.getTab()).put(tabAttribute.getAttribute().getValue(),
+									new HashMap<LscDatasetModificationType, ArrayList<?>>());
+						}
+						attrs.get(tabAttribute.getTab()).get(tabAttribute.getAttribute().getValue())
+								.put(attributeModification.getOperation(), list);
+					}
+				} else {
+					throw new LscServiceException(String.format(
+							"%s is not a supported type for attribute %s",
+							attributeModification.getValues().getClass().toString(),
+							attributeModification.getAttributeName()));
+				}
+			}
+		}
+		return attrs;
 	}
 
 	private String[] getPasswordArray(Object somePassword, String passwordHash) {
