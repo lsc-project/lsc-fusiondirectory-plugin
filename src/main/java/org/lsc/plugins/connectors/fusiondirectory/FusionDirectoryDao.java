@@ -58,6 +58,7 @@ import org.glassfish.jersey.client.ClientProperties;
 import org.glassfish.jersey.client.JerseyClientBuilder;
 import org.glassfish.jersey.jackson.JacksonFeature;
 import org.glassfish.jersey.jdk.connector.JdkConnectorProvider;
+import org.lsc.LscDatasetModification.LscDatasetModificationType;
 import org.lsc.exception.LscServiceException;
 import org.lsc.plugins.connectors.fusiondirectory.beans.Login;
 import org.lsc.plugins.connectors.fusiondirectory.beans.Tab;
@@ -97,6 +98,8 @@ public class FusionDirectoryDao {
 	private final String directory;
 
 	private WebTarget target;
+	private WebTarget laxTarget; // Same than target but with http compliance validation off for some request
+									// such as DELETE on multiple attributes (involve sending a request body )
 	private ObjectMapper mapper;
 
 	// Keep one token / thread worker
@@ -109,17 +112,21 @@ public class FusionDirectoryDao {
 		this.password = password;
 		this.sessionLifetime = sessionLifetime;
 		this.directory = getDirectory(directory);
-		target = clientBuilder().build().target(url);
+		target = clientBuilder(false).build().target(url);
+		laxTarget = clientBuilder(true).build().target(url);
 		tokenCache = new HashMap<>();
 	}
 
-	private JerseyClientBuilder clientBuilder() {
+	private JerseyClientBuilder clientBuilder(boolean lax) {
 		// Use JdkConnectorProvider to support PATCH HTTP method on Java 17
 		// See https://github.com/eclipse-ee4j/jersey/issues/4825
 		ClientConfig clientConfig = new ClientConfig();
 		clientConfig.connectorProvider(new JdkConnectorProvider()).register(new JacksonFeature())
 				.property(ClientProperties.CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT_MS)
 				.property(ClientProperties.READ_TIMEOUT, DEFAULT_READ_TIMEOUT_MS);
+		if (lax) {
+			clientConfig.property(ClientProperties.SUPPRESS_HTTP_COMPLIANCE_VALIDATION, true);
+		}
 		return new JerseyClientBuilder().withConfig(clientConfig);
 	}
 
@@ -296,6 +303,29 @@ public class FusionDirectoryDao {
 		return response;
 	}
 
+	private Response httpDeleteWithData(WebTarget webTarget, Entity<?> entity) throws LscServiceException {
+		return httpDeleteWithData(webTarget, entity, false);
+	}
+
+	private Response httpDeleteWithData(WebTarget webTarget, Entity<?> entity, boolean resetSession)
+			throws LscServiceException {
+		Response response = webTarget.request().header(SESSION_TOKEN, getToken(resetSession).getSessionId())
+				.method("DELETE", entity);
+		if (!resetSession && Response.Status.fromStatusCode(response.getStatus()) == Response.Status.UNAUTHORIZED) {
+			response.close();
+			// Try again once to restart session.
+			return httpDeleteWithData(webTarget, entity, true);
+		}
+		if (!checkResponse(response)) {
+			String errorMessage = String.format("status: %d, message: %s", response.getStatus(),
+					response.readEntity(String.class));
+			response.close();
+			LOGGER.error(errorMessage);
+			throw new LscServiceException(errorMessage);
+		}
+		return response;
+	}
+
 	public ObjectNode getList(String entity, Optional<String> base, Optional<String> pivot, Optional<String> computedFilter) throws LscServiceException {
 		WebTarget currentTarget = target.path(OBJECTS).path(entity);
 		if (base.isPresent()) {
@@ -395,7 +425,6 @@ public class FusionDirectoryDao {
 		return attribute;
 	}
 
-	@SuppressWarnings("unchecked")
 	private List<String> filterAndStripOptionFromValues(String attribute, Object rawValues) {
 		Matcher mopt = PATTERN_ATTR_OPT.matcher(attribute);
 		List<String> values = new ArrayList<String>();
@@ -438,7 +467,8 @@ public class FusionDirectoryDao {
 	}
 
 	public boolean modify(String entity, String dn, Map<String, Map<String, Object>> updateAttributes,
-			List<String> deleteAttributes)
+			List<String> deleteAttributes,
+			Map<String, Map<String, Map<LscDatasetModificationType, ArrayList<?>>>> updateMultipleAttributes)
 			throws LscServiceException {
 
 		if (updateAttributes.size() > 0) {
@@ -462,6 +492,29 @@ public class FusionDirectoryDao {
 				} finally {
 					if (response != null) {
 						response.close();
+					}
+				}
+			}
+
+			for (String tab : updateMultipleAttributes.keySet()) {
+				Map<String, Map<LscDatasetModificationType, ArrayList<?>>> attributes = updateMultipleAttributes
+						.get(tab);
+				for (String attribute : attributes.keySet()) {
+					for (LscDatasetModificationType operation : attributes.get(attribute).keySet()) {
+						List<?> values = attributes.get(attribute).get(operation);
+						if (operation.equals(LscDatasetModificationType.ADD_VALUES)) {
+							WebTarget currentTarget = target.path(OBJECTS).path(entity).path(dn).path(tab)
+									.path(attribute).path("values");
+							try (Response response = httpPatch(currentTarget,
+									Entity.entity(values, MediaType.APPLICATION_JSON))) {
+							}
+						} else if (operation.equals(LscDatasetModificationType.DELETE_VALUES)) {
+							WebTarget currentTarget = laxTarget.path(OBJECTS).path(entity).path(dn).path(tab)
+									.path(attribute).path("values");
+							try (Response response = httpDeleteWithData(currentTarget,
+									Entity.entity(values, MediaType.APPLICATION_JSON))) {
+							}
+						}
 					}
 				}
 			}

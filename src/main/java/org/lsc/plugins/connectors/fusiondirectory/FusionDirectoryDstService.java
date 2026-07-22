@@ -154,10 +154,11 @@ public class FusionDirectoryDstService extends FusionDirectoryAbstractService im
 				return true;
 			case CREATE_OBJECT:
 				LOGGER.debug("Creating fusiondirectory object with: " + lm.getModificationsItemsByHash());
-				return create(lm.getModificationsItemsByHash());
+				return create(lm.getLscAttributeModifications());
 			case UPDATE_OBJECT:
-				LOGGER.debug("Modifying fusiondirectory object: " + lm.getMainIdentifier() + " with: " + lm.getModificationsItemsByHash());
-				return modify(lm.getMainIdentifier(), lm.getModificationsItemsByHash());
+				LOGGER.debug("Modifying fusiondirectory object: " + lm.getMainIdentifier() + " with: "
+						+ lm.getModificationsItemsByHash());
+				return modify(lm.getMainIdentifier(), lm.getLscAttributeModifications());
 			case DELETE_OBJECT:
 				LOGGER.debug("Deleting fusiondirectory object: " + lm.getMainIdentifier());
 				return delete(lm.getMainIdentifier());
