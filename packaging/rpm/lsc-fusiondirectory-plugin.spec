@@ -1,9 +1,9 @@
-%global lsc_min_version		2.2
+%global lsc_min_version		2.3
 
 %bcond_with build_from_sources
 
 Name:          lsc-fusiondirectory-plugin
-Version:       1.2
+Version:       1.3
 Release:       1%{?dist}
 Summary:       LSC FusionDirectory plugin
 License:       BSD-3-Clause
@@ -74,6 +74,8 @@ install -m 0644 %{SOURCE1} %{buildroot}%{_libdir}/lsc/
 %endif
 %{_libdir}/lsc/lsc-fusiondirectory-plugin-%{version}-distribution.jar
 
+* Wed Jul 29 2026 Xavier Bachelot <xavier.bachelot@worteks.com> - 1.3-1
+- Update to 1.3
 
 %changelog
 * Mon May 18 2026 Xavier Bachelot <xavier.bachelot@worteks.com> - 1.2-1
