@@ -1,0 +1,14 @@
+Source: lsc-fusiondirectory-plugin
+Section: java
+Priority: optional
+Maintainer: David Coutadeur <david.coutadeur@gmail.com>
+Build-Depends: debhelper (>> 7)
+Standards-Version: 3.9.5
+Homepage: https://lsc-project.org/
+Vcs-Git: https://github.com/lsc-project/lsc-fusiondirectory-plugin.git
+Vcs-Browser: https://github.com/lsc-project/lsc-fusiondirectory-plugin
+
+Package: lsc-fusiondirectory-plugin
+Architecture: all
+Depends: ${misc:Depends}, lsc (>= 2.3)
+Description: Fusion Directory LSC plugin
