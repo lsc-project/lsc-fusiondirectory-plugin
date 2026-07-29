@@ -74,9 +74,9 @@ install -m 0644 %{SOURCE1} %{buildroot}%{_libdir}/lsc/
 %endif
 %{_libdir}/lsc/lsc-fusiondirectory-plugin-%{version}-distribution.jar
 
+%changelog
 * Wed Jul 29 2026 Xavier Bachelot <xavier.bachelot@worteks.com> - 1.3-1
 - Update to 1.3
 
-%changelog
 * Mon May 18 2026 Xavier Bachelot <xavier.bachelot@worteks.com> - 1.2-1
 - Initial specfile
